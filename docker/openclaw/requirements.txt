@@ -1,0 +1,5 @@
+# OpenClaw dependencies (adjust based on actual OpenClaw requirements)
+flask>=3.0.0
+python-telegram-bot>=21.0
+requests>=2.31.0
+cryptography>=42.0.0

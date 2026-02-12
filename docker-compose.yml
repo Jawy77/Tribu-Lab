@@ -1,0 +1,111 @@
+# =============================================================================
+# 🛡️ Docker Compose — Búnker DevSecOps
+# Stack completo con hardening de seguridad
+# =============================================================================
+
+services:
+  # ── OpenClaw Bot (El Cerebro) ────────────────────────────────
+  openclaw:
+    build:
+      context: .
+      dockerfile: docker/openclaw/Dockerfile
+    container_name: openclaw-bunker
+    restart: unless-stopped
+    # Network mode host para acceder a wg0 (WireGuard)
+    # En producción dentro del búnker usamos host mode
+    # Para desarrollo local, usamos la red de Docker
+    network_mode: ${NETWORK_MODE:-bridge}
+    env_file:
+      - .env
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - openclaw-logs:/app/logs
+      - openclaw-tmp:/app/tmp
+    # ── Security Hardening ──
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100M
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    # Limitar recursos
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── App de Ejemplo (Para Demo SAST) ─────────────────────────
+  demo-app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    container_name: demo-app
+    ports:
+      - "127.0.0.1:5000:5000"  # Solo localhost
+    env_file:
+      - .env
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ── Nginx Reverse Proxy con mTLS ────────────────────────────
+  nginx-mtls:
+    image: nginx:alpine
+    container_name: nginx-mtls-proxy
+    ports:
+      - "10.13.13.2:8443:443"  # Solo accesible desde la VPN
+    volumes:
+      - ./configs/nginx/nginx-mtls.conf:/etc/nginx/nginx.conf:ro
+      - ./crypto/certs:/etc/nginx/certs:ro
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETGID
+      - SETUID
+    depends_on:
+      openclaw:
+        condition: service_healthy
+
+volumes:
+  openclaw-logs:
+  openclaw-tmp:

@@ -1,0 +1,69 @@
+{
+  "skill_name": "devsecops-pipeline",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a GitHub Actions pipeline for my Python Flask app that includes security scanning",
+      "expected_output": "A complete .yml workflow file with secret scanning, Bandit SAST, dependency check, and container scanning stages",
+      "files": [],
+      "assertions": [
+        "Output contains a valid GitHub Actions YAML workflow",
+        "Pipeline includes at least secret scanning and SAST stages",
+        "Bandit is configured for Python scanning",
+        "Pipeline uses proper job dependencies (needs:)",
+        "Exit codes or severity thresholds are configured"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Audit this Dockerfile for security issues:\nFROM python:latest\nCOPY . /app\nWORKDIR /app\nRUN pip install -r requirements.txt\nEXPOSE 8080\nCMD [\"python\", \"app.py\"]",
+      "expected_output": "A list of security findings with severity ratings and remediated Dockerfile",
+      "files": [],
+      "assertions": [
+        "Identifies 'latest' tag as a security issue",
+        "Recommends non-root user",
+        "Suggests multi-stage build",
+        "Recommends HEALTHCHECK",
+        "Suggests --no-cache-dir for pip",
+        "Provides a corrected Dockerfile"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I have a Terraform config with a security group that allows SSH from 0.0.0.0/0. How do I fix this for a WireGuard VPN setup?",
+      "expected_output": "Explanation of the risk and corrected Terraform code restricting SSH to VPN CIDR",
+      "files": [],
+      "assertions": [
+        "Explains why 0.0.0.0/0 SSH is dangerous",
+        "Provides Terraform code with VPN CIDR restriction",
+        "Mentions IMDSv2 as additional hardening",
+        "Suggests encrypted EBS volumes"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Set up monitoring alerts for my DevSecOps pipeline. What should I monitor and what makes a good alert?",
+      "expected_output": "Monitoring strategy with actionable alert guidelines",
+      "files": [],
+      "assertions": [
+        "Distinguishes between alerts and logs",
+        "Mentions that alerts must be actionable",
+        "Covers pipeline-specific metrics (build time, failure rate, security findings trend)",
+        "Mentions monitoring dependencies, not just the application",
+        "Addresses alert fatigue"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Review this Python code for security vulnerabilities:\nimport subprocess\ndef ping(host):\n    result = subprocess.run(f'ping -c 1 {host}', shell=True, capture_output=True)\n    return result.stdout",
+      "expected_output": "Identification of command injection vulnerability with secure alternative",
+      "files": [],
+      "assertions": [
+        "Identifies command injection via shell=True + f-string",
+        "References Bandit B602",
+        "Provides secure alternative with shell=False and list arguments",
+        "Recommends input validation (regex for IP format)"
+      ]
+    }
+  ]
+}
