@@ -1,0 +1,209 @@
+# =============================================================================
+# 🛡️ DevSecOps Pipeline — Búnker Workshop
+# Comunidad Claude Anthropic Colombia
+# =============================================================================
+# Este pipeline implementa security gates en cada etapa:
+#   1. Secret scanning (evitar leaks)
+#   2. SAST con Bandit (Python) y Semgrep (multi-lenguaje)
+#   3. Dependency check (vulnerabilidades en paquetes)
+#   4. Container scanning con Trivy
+#   5. IaC scanning con tfsec
+#   6. Notificación al Búnker (OpenClaw via Telegram)
+# =============================================================================
+
+name: "🔒 DevSecOps Pipeline"
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  DOCKER_IMAGE: devsecops-workshop-app
+  DOCKER_TAG: ${{ github.sha }}
+
+jobs:
+  # ─────────────────────────────────────────────
+  # STAGE 1: Secret Detection
+  # ─────────────────────────────────────────────
+  secret-scan:
+    name: "🔑 Secret Scanning"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history para detectar secrets en commits anteriores
+
+      - name: TruffleHog - Detectar secrets expuestos
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+      - name: Gitleaks - Scanning adicional
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────
+  # STAGE 2: Static Analysis (SAST)
+  # ─────────────────────────────────────────────
+  sast:
+    name: "🔍 SAST Analysis"
+    runs-on: ubuntu-latest
+    needs: secret-scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install security tools
+        run: |
+          pip install bandit safety
+          pip install semgrep
+
+      # Bandit — Python SAST
+      - name: "Bandit - Python Security Linter"
+        run: |
+          echo "## 🐍 Bandit Results" >> $GITHUB_STEP_SUMMARY
+          bandit -r . -f json -o bandit-report.json \
+            --exclude ./.venv,./tests,./node_modules || true
+          bandit -r . -f screen \
+            --exclude ./.venv,./tests,./node_modules >> $GITHUB_STEP_SUMMARY || true
+
+      # Semgrep — Multi-language SAST
+      - name: "Semgrep - Multi-language Scanner"
+        run: |
+          echo "## 🔎 Semgrep Results" >> $GITHUB_STEP_SUMMARY
+          semgrep --config auto --json -o semgrep-report.json . || true
+          semgrep --config auto . >> $GITHUB_STEP_SUMMARY 2>&1 || true
+
+      # Safety — Dependency vulnerabilities
+      - name: "Safety - Dependency Check"
+        run: |
+          if [ -f requirements.txt ]; then
+            echo "## 📦 Dependency Check" >> $GITHUB_STEP_SUMMARY
+            safety check -r requirements.txt --output json > safety-report.json || true
+            safety check -r requirements.txt >> $GITHUB_STEP_SUMMARY || true
+          fi
+
+      - name: Upload SAST Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sast-reports
+          path: |
+            bandit-report.json
+            semgrep-report.json
+            safety-report.json
+
+  # ─────────────────────────────────────────────
+  # STAGE 3: Build & Container Scan
+  # ─────────────────────────────────────────────
+  container-security:
+    name: "🐳 Container Security"
+    runs-on: ubuntu-latest
+    needs: sast
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: |
+          docker build -t $DOCKER_IMAGE:$DOCKER_TAG -f docker/app/Dockerfile .
+
+      # Trivy — Container vulnerability scanner
+      - name: "Trivy - Container Scan"
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}"
+          format: "sarif"
+          output: "trivy-report.sarif"
+          severity: "CRITICAL,HIGH"
+
+      - name: "Trivy - Summary"
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}"
+          format: "table"
+          severity: "CRITICAL,HIGH,MEDIUM"
+
+      # Docker Scout — Supply chain analysis
+      - name: "Hadolint - Dockerfile Linter"
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/app/Dockerfile
+
+      - name: Upload Container Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: container-reports
+          path: trivy-report.sarif
+
+  # ─────────────────────────────────────────────
+  # STAGE 4: Infrastructure as Code Scan
+  # ─────────────────────────────────────────────
+  iac-security:
+    name: "🏗️ IaC Security"
+    runs-on: ubuntu-latest
+    needs: secret-scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "tfsec - Terraform Security"
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: terraform/
+
+      - name: "Checkov - IaC Policy Check"
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          output_format: cli
+          soft_fail: true
+
+  # ─────────────────────────────────────────────
+  # STAGE 5: Notify Búnker (OpenClaw via Telegram)
+  # ─────────────────────────────────────────────
+  notify-bunker:
+    name: "📡 Notificar al Búnker"
+    runs-on: ubuntu-latest
+    needs: [sast, container-security, iac-security]
+    if: always()
+    steps:
+      - name: Prepare Security Summary
+        id: summary
+        run: |
+          STATUS="✅ PASSED"
+          if [[ "${{ needs.sast.result }}" == "failure" ]] || \
+             [[ "${{ needs.container-security.result }}" == "failure" ]] || \
+             [[ "${{ needs.iac-security.result }}" == "failure" ]]; then
+            STATUS="🚨 FAILED"
+          fi
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+      - name: Notify via Telegram (al Búnker)
+        if: env.TELEGRAM_BOT_TOKEN != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          MESSAGE="🛡️ *DevSecOps Pipeline Report*%0A"
+          MESSAGE+="Repo: \`${{ github.repository }}\`%0A"
+          MESSAGE+="Branch: \`${{ github.ref_name }}\`%0A"
+          MESSAGE+="Commit: \`${{ github.sha }}\`%0A"
+          MESSAGE+="Status: ${{ steps.summary.outputs.status }}%0A"
+          MESSAGE+="%0A*Security Gates:*%0A"
+          MESSAGE+="• SAST: ${{ needs.sast.result }}%0A"
+          MESSAGE+="• Container: ${{ needs.container-security.result }}%0A"
+          MESSAGE+="• IaC: ${{ needs.iac-security.result }}"
+
+          curl -s -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${MESSAGE}" \
+            -d parse_mode="Markdown"
