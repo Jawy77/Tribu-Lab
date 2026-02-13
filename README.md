@@ -134,5 +134,5 @@ MIT — Hecho con 🔒 por [Mantishield](https://mantishield.com) para la Comuni
 ## 🙏 Créditos
 
 - **Jawy** — Mantishield / Cybersecurity Researcher
-- **Comunidad Claude Anthropic Colombia**
+- **Comunidad Tribu AI Colombia**
 - **OpenClaw Project**
