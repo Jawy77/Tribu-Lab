@@ -129,10 +129,10 @@ devsecops-bunker-workshop/
 
 ## 📜 Licencia
 
-MIT — Hecho con 🔒 por [Mantishield](https://mantishield.com) para la Comunidad Claude Anthropic Colombia.
+MIT — Hecho con 🔒 por [Mantishield](https://mantishield.com) para la Comunidad Tribu Colombia y Latam.
 
 ## 🙏 Créditos
 
 - **Jawy** — Mantishield / Cybersecurity Researcher
-- **Comunidad Claude Anthropic Colombia**
+- **Comunidad Tribu AI Colombia**
 - **OpenClaw Project**
