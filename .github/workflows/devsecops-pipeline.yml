@@ -207,3 +207,33 @@ jobs:
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${MESSAGE}" \
             -d parse_mode="Markdown"
+
+      - name: Notify via Discord (al Búnker)
+        if: env.DISCORD_WEBHOOK_URL != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ steps.summary.outputs.status }}"
+          COLOR=3066993  # verde
+          if [[ "$STATUS" == *"FAILED"* ]]; then
+            COLOR=15158332  # rojo
+          fi
+
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"🛡️ DevSecOps Pipeline Report\",
+                \"color\": $COLOR,
+                \"fields\": [
+                  {\"name\": \"Repo\", \"value\": \"\`${{ github.repository }}\`\", \"inline\": true},
+                  {\"name\": \"Branch\", \"value\": \"\`${{ github.ref_name }}\`\", \"inline\": true},
+                  {\"name\": \"Status\", \"value\": \"$STATUS\", \"inline\": false},
+                  {\"name\": \"SAST\", \"value\": \"${{ needs.sast.result }}\", \"inline\": true},
+                  {\"name\": \"Container\", \"value\": \"${{ needs.container-security.result }}\", \"inline\": true},
+                  {\"name\": \"IaC\", \"value\": \"${{ needs.iac-security.result }}\", \"inline\": true}
+                ],
+                \"footer\": {\"text\": \"Búnker DevSecOps | Mantishield\"},
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+              }]
+            }"
