@@ -1,0 +1,49 @@
+{
+  "skill_name": "docker-hardening-auditor",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Audit this Dockerfile for security issues:\nFROM python:latest\nENV DATABASE_PASSWORD=supersecret123\nCOPY . /app\nWORKDIR /app\nRUN pip install -r requirements.txt\nEXPOSE 8080\nEXPOSE 22\nCMD [\"python\", \"app.py\"]",
+      "expected_output": "A severity-rated list of findings covering: root execution, latest tag, hardcoded secret in ENV, unnecessary SSH port, missing HEALTHCHECK, heavy base image, missing multi-stage build, and a corrected Dockerfile",
+      "files": [],
+      "assertions": [
+        "Identifies missing USER instruction as CRITICAL (runs as root)",
+        "Identifies latest tag as HIGH (unpinned base image)",
+        "Identifies DATABASE_PASSWORD in ENV as CRITICAL (secret exposure)",
+        "Identifies EXPOSE 22 as MEDIUM (unnecessary SSH port)",
+        "Identifies missing HEALTHCHECK as MEDIUM",
+        "Recommends slim or alpine base image",
+        "Provides a complete hardened Dockerfile with all fixes"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review this multi-stage Dockerfile and find remaining security gaps:\nFROM node:18 AS builder\nWORKDIR /app\nCOPY package*.json ./\nRUN npm install\nCOPY . .\nRUN npm run build\n\nFROM node:18\nWORKDIR /app\nCOPY --from=builder /app/dist ./dist\nCOPY --from=builder /app/node_modules ./node_modules\nADD config.tar.gz /app/config/\nEXPOSE 3000\nCMD [\"node\", \"dist/index.js\"]",
+      "expected_output": "Findings for: non-slim base in runtime stage, no USER instruction, ADD instead of COPY for non-tar-extraction use case, no HEALTHCHECK, and full node_modules copied to runtime",
+      "files": [],
+      "assertions": [
+        "Identifies missing USER instruction in runtime stage",
+        "Identifies non-slim base image in runtime stage (node:18 instead of node:18-slim)",
+        "Notes ADD usage and evaluates whether tar extraction is intentional",
+        "Identifies missing HEALTHCHECK",
+        "Recommends pinning node:18 to a specific patch version"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Harden this Dockerfile for production use:\nFROM ubuntu\nRUN apt-get update\nRUN apt-get install -y python3 python3-pip curl\nARG API_TOKEN=sk-live-abc123\nENV FLASK_SECRET_KEY=mysecretkey\nCOPY . /app\nWORKDIR /app\nRUN pip3 install -r requirements.txt\nEXPOSE 5000\nEXPOSE 5900\nEXPOSE 9229\nCMD [\"python3\", \"app.py\"]",
+      "expected_output": "Comprehensive audit identifying all issues with a production-ready hardened Dockerfile",
+      "files": [],
+      "assertions": [
+        "Identifies untagged ubuntu base as HIGH",
+        "Identifies split apt-get update and install as a caching issue",
+        "Identifies API_TOKEN in ARG as CRITICAL (visible in docker history)",
+        "Identifies FLASK_SECRET_KEY in ENV as CRITICAL",
+        "Flags debug ports 5900 (VNC) and 9229 (Node debug) as MEDIUM",
+        "Identifies missing USER, HEALTHCHECK, --no-cache-dir, and --no-install-recommends",
+        "Recommends python:3.x-slim instead of ubuntu with manual Python install",
+        "Provides a complete remediated Dockerfile"
+      ]
+    }
+  ]
+}
