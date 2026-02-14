@@ -15,7 +15,7 @@ name: "🔒 DevSecOps Pipeline"
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -101,18 +101,51 @@ jobs:
             safety-report.json
 
   # ─────────────────────────────────────────────
-  # STAGE 3: Build & Container Scan
+  # STAGE 3: Check for Dockerfile & Terraform
+  # ─────────────────────────────────────────────
+  detect-files:
+    name: "📂 Detect Config Files"
+    runs-on: ubuntu-latest
+    outputs:
+      has_dockerfile: ${{ steps.check.outputs.has_dockerfile }}
+      has_terraform: ${{ steps.check.outputs.has_terraform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for Dockerfile and .tf files
+        id: check
+        run: |
+          if find . -name 'Dockerfile' -type f | grep -q .; then
+            echo "has_dockerfile=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_dockerfile=false" >> $GITHUB_OUTPUT
+          fi
+          if find . -name '*.tf' -type f | grep -q .; then
+            echo "has_terraform=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_terraform=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ─────────────────────────────────────────────
+  # STAGE 4: Build & Container Scan (solo si hay Dockerfile)
   # ─────────────────────────────────────────────
   container-security:
     name: "🐳 Container Security"
     runs-on: ubuntu-latest
-    needs: sast
+    needs: [sast, detect-files]
+    if: needs.detect-files.outputs.has_dockerfile == 'true'
     steps:
       - uses: actions/checkout@v4
 
+      - name: Find Dockerfile
+        id: find-dockerfile
+        run: |
+          DOCKERFILE=$(find . -name 'Dockerfile' -type f | head -1)
+          echo "path=$DOCKERFILE" >> $GITHUB_OUTPUT
+
       - name: Build Docker Image
         run: |
-          docker build -t $DOCKER_IMAGE:$DOCKER_TAG -f docker/app/Dockerfile .
+          docker build -t $DOCKER_IMAGE:$DOCKER_TAG -f ${{ steps.find-dockerfile.outputs.path }} .
 
       # Trivy — Container vulnerability scanner
       - name: "Trivy - Container Scan"
@@ -130,11 +163,10 @@ jobs:
           format: "table"
           severity: "CRITICAL,HIGH,MEDIUM"
 
-      # Docker Scout — Supply chain analysis
       - name: "Hadolint - Dockerfile Linter"
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: docker/app/Dockerfile
+          dockerfile: ${{ steps.find-dockerfile.outputs.path }}
 
       - name: Upload Container Reports
         uses: actions/upload-artifact@v4
@@ -144,42 +176,51 @@ jobs:
           path: trivy-report.sarif
 
   # ─────────────────────────────────────────────
-  # STAGE 4: Infrastructure as Code Scan
+  # STAGE 5: Infrastructure as Code Scan (solo si hay .tf files)
   # ─────────────────────────────────────────────
   iac-security:
     name: "🏗️ IaC Security"
     runs-on: ubuntu-latest
-    needs: secret-scan
+    needs: [secret-scan, detect-files]
+    if: needs.detect-files.outputs.has_terraform == 'true'
     steps:
       - uses: actions/checkout@v4
+
+      - name: Find Terraform directory
+        id: find-tf
+        run: |
+          TF_DIR=$(dirname $(find . -name '*.tf' -type f | head -1))
+          echo "dir=$TF_DIR" >> $GITHUB_OUTPUT
 
       - name: "tfsec - Terraform Security"
         uses: aquasecurity/tfsec-action@v1.0.0
         with:
-          working_directory: terraform/
+          working_directory: ${{ steps.find-tf.outputs.dir }}
 
       - name: "Checkov - IaC Policy Check"
         uses: bridgecrewio/checkov-action@master
         with:
-          directory: terraform/
+          directory: ${{ steps.find-tf.outputs.dir }}
           framework: terraform
           output_format: cli
           soft_fail: true
 
   # ─────────────────────────────────────────────
-  # STAGE 5: Notify Búnker (OpenClaw via Telegram)
+  # STAGE 6-7: Notify Búnker (Telegram + Discord)
   # ─────────────────────────────────────────────
   notify-bunker:
     name: "📡 Notificar al Búnker"
     runs-on: ubuntu-latest
-    needs: [sast, container-security, iac-security]
+    needs: [secret-scan, sast, container-security, iac-security]
     if: always()
     steps:
       - name: Prepare Security Summary
         id: summary
         run: |
           STATUS="✅ PASSED"
-          if [[ "${{ needs.sast.result }}" == "failure" ]] || \
+          # Solo falla si algún job falló (skipped no es fallo)
+          if [[ "${{ needs.secret-scan.result }}" == "failure" ]] || \
+             [[ "${{ needs.sast.result }}" == "failure" ]] || \
              [[ "${{ needs.container-security.result }}" == "failure" ]] || \
              [[ "${{ needs.iac-security.result }}" == "failure" ]]; then
             STATUS="🚨 FAILED"
@@ -198,6 +239,7 @@ jobs:
           MESSAGE+="Commit: \`${{ github.sha }}\`%0A"
           MESSAGE+="Status: ${{ steps.summary.outputs.status }}%0A"
           MESSAGE+="%0A*Security Gates:*%0A"
+          MESSAGE+="• Secrets: ${{ needs.secret-scan.result }}%0A"
           MESSAGE+="• SAST: ${{ needs.sast.result }}%0A"
           MESSAGE+="• Container: ${{ needs.container-security.result }}%0A"
           MESSAGE+="• IaC: ${{ needs.iac-security.result }}"
@@ -229,6 +271,7 @@ jobs:
                   {\"name\": \"Repo\", \"value\": \"\`${{ github.repository }}\`\", \"inline\": true},
                   {\"name\": \"Branch\", \"value\": \"\`${{ github.ref_name }}\`\", \"inline\": true},
                   {\"name\": \"Status\", \"value\": \"$STATUS\", \"inline\": false},
+                  {\"name\": \"Secrets\", \"value\": \"${{ needs.secret-scan.result }}\", \"inline\": true},
                   {\"name\": \"SAST\", \"value\": \"${{ needs.sast.result }}\", \"inline\": true},
                   {\"name\": \"Container\", \"value\": \"${{ needs.container-security.result }}\", \"inline\": true},
                   {\"name\": \"IaC\", \"value\": \"${{ needs.iac-security.result }}\", \"inline\": true}
