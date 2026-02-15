@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bunker DevSecOps — Monitoring Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cyber: {
+              bg: '#0a0e17',
+              card: '#111827',
+              border: '#1e293b',
+              accent: '#00ff88',
+              warn: '#ff6b35',
+              crit: '#ff2d55',
+              blue: '#00b4d8',
+              dim: '#64748b',
+            }
+          },
+          fontFamily: {
+            mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { background: #0a0e17; font-family: 'Inter', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .glow-green { box-shadow: 0 0 20px rgba(0,255,136,0.15), inset 0 0 20px rgba(0,255,136,0.03); }
+    .glow-red { box-shadow: 0 0 20px rgba(255,45,85,0.15), inset 0 0 20px rgba(255,45,85,0.03); }
+    .glow-blue { box-shadow: 0 0 15px rgba(0,180,216,0.1); }
+    .scan-line {
+      position: relative;
+      overflow: hidden;
+    }
+    .scan-line::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #00ff88, transparent);
+      animation: scan 3s linear infinite;
+    }
+    @keyframes scan { 0%{top:0} 100%{top:100%} }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(30,41,59,0.3) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30,41,59,0.3) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #111827; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    .node-connection {
+      stroke-dasharray: 8 4;
+      animation: dash 1.5s linear infinite;
+    }
+    @keyframes dash { to { stroke-dashoffset: -12; } }
+  </style>
+</head>
+<body class="text-gray-200 min-h-screen grid-bg">
+
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+/* ── Helpers ──────────────────────────────────────── */
+const timeAgo = (iso) => {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+};
+
+const fmtDate = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleString('es-CO', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  });
+};
+
+const sevColor = {
+  critical: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/40', dot: 'bg-red-500' },
+  high:     { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/40', dot: 'bg-orange-500' },
+  medium:   { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/40', dot: 'bg-yellow-500' },
+  low:      { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/40', dot: 'bg-blue-500' },
+};
+
+const levelIcon = {
+  success: { icon: '\u2713', color: 'text-emerald-400' },
+  warning: { icon: '\u26A0', color: 'text-yellow-400' },
+  info:    { icon: '\u25CF', color: 'text-cyan-400' },
+  error:   { icon: '\u2717', color: 'text-red-400' },
+};
+
+/* ── Components ───────────────────────────────────── */
+
+function SeverityBadge({ severity }) {
+  const s = sevColor[severity] || sevColor.low;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider ${s.bg} ${s.text} border ${s.border}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`}></span>
+      {severity}
+    </span>
+  );
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    passed:  { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/40', label: 'PASSED' },
+    failed:  { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/40', label: 'FAILED' },
+    skipped: { bg: 'bg-slate-500/20', text: 'text-slate-400', border: 'border-slate-500/40', label: 'SKIPPED' },
+    fixed:   { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/40', label: 'FIXED' },
+    open:    { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/40', label: 'OPEN' },
+  };
+  const s = map[status] || map.skipped;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${s.bg} ${s.text} border ${s.border}`}>
+      {s.label}
+    </span>
+  );
+}
+
+/* ── Pipeline Status Card ─────────────────────────── */
+function PipelineStatus({ pipeline }) {
+  if (!pipeline) return null;
+  const ok = pipeline.status === 'passed';
+  const stages = Object.entries(pipeline.stages);
+  return (
+    <div className={`rounded-xl border p-6 ${ok ? 'border-emerald-500/30 glow-green' : 'border-red-500/30 glow-red'} bg-cyber-card`}>
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <div className={`w-4 h-4 rounded-full pulse-dot ${ok ? 'bg-emerald-400' : 'bg-red-400'}`}></div>
+          <h2 className="text-lg font-bold tracking-wide">Pipeline Status</h2>
+        </div>
+        <div className={`text-3xl font-black tracking-widest ${ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          {ok ? 'OPERATIONAL' : 'FAILED'}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+        <div className="bg-slate-800/50 rounded-lg p-3">
+          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">Last Run</div>
+          <div className="text-sm font-mono text-slate-300">{fmtDate(pipeline.last_run)}</div>
+        </div>
+        <div className="bg-slate-800/50 rounded-lg p-3">
+          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">Duration</div>
+          <div className="text-sm font-mono text-slate-300">{pipeline.duration_seconds}s</div>
+        </div>
+        <div className="bg-slate-800/50 rounded-lg p-3">
+          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">Commit</div>
+          <div className="text-sm font-mono text-cyan-400">{pipeline.commit}</div>
+        </div>
+        <div className="bg-slate-800/50 rounded-lg p-3">
+          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">Trigger</div>
+          <div className="text-sm font-mono text-slate-300">{pipeline.trigger} &rarr; {pipeline.branch}</div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {stages.map(([name, data]) => (
+          <div key={name} className="flex items-center gap-2 bg-slate-800/40 rounded-lg px-3 py-2 border border-slate-700/50">
+            <span className={`w-2 h-2 rounded-full ${data.status === 'passed' ? 'bg-emerald-400' : data.status === 'failed' ? 'bg-red-400' : 'bg-slate-500'}`}></span>
+            <span className="text-xs font-mono text-slate-400">{name}</span>
+            {data.findings > 0 && (
+              <span className="text-[10px] font-bold text-yellow-400 bg-yellow-500/10 px-1.5 rounded">{data.findings}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Vulnerability Table ──────────────────────────── */
+function VulnTable({ vulns }) {
+  if (!vulns) return null;
+  const sorted = [...vulns].sort((a, b) => {
+    const order = { critical: 0, high: 1, medium: 2, low: 3 };
+    return (order[a.severity] ?? 4) - (order[b.severity] ?? 4);
+  });
+  const counts = vulns.reduce((acc, v) => { acc[v.severity] = (acc[v.severity] || 0) + 1; return acc; }, {});
+  const fixed = vulns.filter(v => v.status === 'fixed').length;
+
+  return (
+    <div className="rounded-xl border border-cyber-border bg-cyber-card p-6">
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-lg font-bold tracking-wide">Vulnerability Findings</h2>
+        <div className="flex items-center gap-3">
+          {Object.entries(counts).map(([sev, count]) => (
+            <div key={sev} className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${sevColor[sev]?.dot || 'bg-slate-500'}`}></span>
+              <span className="text-xs font-mono text-slate-400">{count} {sev}</span>
+            </div>
+          ))}
+          <div className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+            {fixed}/{vulns.length} fixed
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-700/50">
+              <th className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Severity</th>
+              <th className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-slate-500 font-semibold">ID</th>
+              <th className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Finding</th>
+              <th className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Location</th>
+              <th className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-slate-500 font-semibold">CWE</th>
+              <th className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((v, i) => (
+              <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                <td className="py-2.5 px-3"><SeverityBadge severity={v.severity} /></td>
+                <td className="py-2.5 px-3 font-mono text-xs text-cyan-400">{v.id}</td>
+                <td className="py-2.5 px-3 text-slate-300">{v.title}</td>
+                <td className="py-2.5 px-3 font-mono text-xs text-slate-500">{v.file}:{v.line}</td>
+                <td className="py-2.5 px-3 font-mono text-xs text-slate-500">{v.cwe}</td>
+                <td className="py-2.5 px-3"><StatusBadge status={v.status} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Architecture Map (SVG) ───────────────────────── */
+function ArchMap({ arch }) {
+  if (!arch) return null;
+  const nodePos = {
+    'vpn-hub': { x: 300, y: 80 },
+    'parrot':  { x: 100, y: 250 },
+    'agent':   { x: 500, y: 250 },
+  };
+  const nodeIcon = {
+    server:      '\uD83D\uDDA5\uFE0F',
+    workstation: '\uD83E\uDD9C',
+    agent:       '\uD83E\uDD16',
+  };
+
+  return (
+    <div className="rounded-xl border border-cyber-border bg-cyber-card p-6">
+      <h2 className="text-lg font-bold tracking-wide mb-4">Bunker Architecture</h2>
+      <svg viewBox="0 0 600 340" className="w-full" style={{maxHeight:'340px'}}>
+        <defs>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Connections */}
+        {arch.connections.map((c, i) => {
+          const from = nodePos[c.from];
+          const to = nodePos[c.to];
+          if (!from || !to) return null;
+          const mx = (from.x + to.x) / 2;
+          const my = (from.y + to.y) / 2 - 15;
+          return (
+            <g key={i}>
+              <line x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+                    className="node-connection" stroke="#00ff88" strokeWidth="1.5" opacity="0.4" filter="url(#glow)" />
+              <rect x={mx - 50} y={my - 10} width="100" height="20" rx="4" fill="#111827" stroke="#1e293b" strokeWidth="1" />
+              <text x={mx} y={my + 4} textAnchor="middle" fill="#64748b" fontSize="9" fontFamily="JetBrains Mono, monospace">
+                {c.protocol} :{c.port}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Nodes */}
+        {arch.nodes.map((n) => {
+          const pos = nodePos[n.id];
+          if (!pos) return null;
+          const isOnline = n.status === 'online';
+          return (
+            <g key={n.id}>
+              <rect x={pos.x - 70} y={pos.y - 35} width="140" height="70" rx="10"
+                    fill="#111827" stroke={isOnline ? '#00ff88' : '#ff2d55'} strokeWidth="1.5" opacity="0.9" />
+              <circle cx={pos.x + 55} cy={pos.y - 20} r="4" fill={isOnline ? '#00ff88' : '#ff2d55'} opacity="0.9">
+                <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite" />
+              </circle>
+              <text x={pos.x} y={pos.y - 10} textAnchor="middle" fill="#e2e8f0" fontSize="13" fontWeight="bold" fontFamily="Inter, sans-serif">
+                {nodeIcon[n.type] || ''} {n.label}
+              </text>
+              <text x={pos.x} y={pos.y + 8} textAnchor="middle" fill="#00b4d8" fontSize="11" fontFamily="JetBrains Mono, monospace">
+                {n.ip}
+              </text>
+              <text x={pos.x} y={pos.y + 24} textAnchor="middle" fill="#64748b" fontSize="8.5" fontFamily="JetBrains Mono, monospace">
+                {n.services.join(' | ')}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* ── Activity Log ─────────────────────────────────── */
+function ActivityLog({ logs }) {
+  if (!logs) return null;
+  return (
+    <div className="rounded-xl border border-cyber-border bg-cyber-card p-6 scan-line">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold tracking-wide">Activity Log</h2>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
+          <span className="text-xs text-slate-500 font-mono">LIVE</span>
+        </div>
+      </div>
+      <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
+        {logs.map((log, i) => {
+          const l = levelIcon[log.level] || levelIcon.info;
+          return (
+            <div key={i} className="flex items-start gap-3 py-2 px-3 rounded-lg hover:bg-slate-800/30 transition-colors fade-in" style={{animationDelay: `${i * 50}ms`}}>
+              <span className={`text-sm mt-0.5 ${l.color}`}>{l.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-slate-300 leading-snug">{log.message}</p>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-[10px] font-mono text-slate-600">{fmtDate(log.timestamp)}</span>
+                  <span className="text-[10px] font-mono text-slate-600 uppercase">{log.event}</span>
+                </div>
+              </div>
+              <span className="text-[10px] text-slate-600 font-mono whitespace-nowrap mt-1">{timeAgo(log.timestamp)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Stats Bar ────────────────────────────────────── */
+function StatsBar({ vulns, pipeline }) {
+  if (!vulns || !pipeline) return null;
+  const total = vulns.length;
+  const fixed = vulns.filter(v => v.status === 'fixed').length;
+  const critical = vulns.filter(v => v.severity === 'critical').length;
+  const stages = Object.values(pipeline.stages);
+  const passedStages = stages.filter(s => s.status === 'passed').length;
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {[
+        { label: 'Total Findings', value: total, color: 'text-white', sub: `${critical} critical` },
+        { label: 'Fixed', value: fixed, color: 'text-emerald-400', sub: `${Math.round(fixed/total*100)}% remediated` },
+        { label: 'Open', value: total - fixed, color: total - fixed > 0 ? 'text-amber-400' : 'text-emerald-400', sub: total - fixed > 0 ? 'action required' : 'all clear' },
+        { label: 'Pipeline Stages', value: `${passedStages}/${stages.length}`, color: 'text-cyan-400', sub: `${pipeline.duration_seconds}s total` },
+      ].map((s, i) => (
+        <div key={i} className="bg-cyber-card border border-cyber-border rounded-xl p-5 glow-blue">
+          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">{s.label}</div>
+          <div className={`text-3xl font-black font-mono ${s.color}`}>{s.value}</div>
+          <div className="text-xs text-slate-500 mt-1">{s.sub}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Main App ─────────────────────────────────────── */
+function App() {
+  const [data, setData] = useState(null);
+  const [clock, setClock] = useState(new Date());
+  const [error, setError] = useState(null);
+
+  const loadData = useCallback(() => {
+    fetch('status.json?t=' + Date.now())
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(d => { setData(d); setError(null); })
+      .catch(() => setError('Cannot load status.json'));
+  }, []);
+
+  useEffect(() => { loadData(); const id = setInterval(loadData, 10000); return () => clearInterval(id); }, [loadData]);
+  useEffect(() => { const id = setInterval(() => setClock(new Date()), 1000); return () => clearInterval(id); }, []);
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      {/* Header */}
+      <header className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <div className="text-2xl">&#x1f6e1;&#xfe0f;</div>
+          <div>
+            <h1 className="text-xl font-bold tracking-wide text-white">Bunker DevSecOps</h1>
+            <p className="text-xs text-slate-500 font-mono tracking-wider">MONITORING DASHBOARD</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-sm font-mono text-cyan-400">{clock.toLocaleTimeString('es-CO', {hour12: false})}</div>
+          <div className="text-[10px] font-mono text-slate-600">{clock.toLocaleDateString('es-CO', {weekday:'long', day:'2-digit', month:'short', year:'numeric'})}</div>
+        </div>
+      </header>
+
+      {error && (
+        <div className="mb-6 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-mono">
+          {error} — Place status.json in the same directory or serve via HTTP.
+        </div>
+      )}
+
+      {data && (
+        <div className="space-y-6">
+          <StatsBar vulns={data.vulnerabilities} pipeline={data.pipeline} />
+          <PipelineStatus pipeline={data.pipeline} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ArchMap arch={data.architecture} />
+            <ActivityLog logs={data.activity_log} />
+          </div>
+          <VulnTable vulns={data.vulnerabilities} />
+        </div>
+      )}
+
+      {/* Footer */}
+      <footer className="mt-10 pt-6 border-t border-slate-800/50 text-center">
+        <p className="text-[10px] font-mono text-slate-600 tracking-widest">
+          BUNKER DEVSECOPS &middot; TRIBU-LAB &middot; COMUNIDAD CLAUDE ANTHROPIC COLOMBIA
+        </p>
+        <p className="text-[10px] font-mono text-slate-700 mt-1">Auto-refresh: 10s &middot; Data: monitoring/status.json</p>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

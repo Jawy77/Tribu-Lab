@@ -1,0 +1,54 @@
+{
+  "pipeline": {
+    "status": "passed",
+    "last_run": "2026-02-18T23:45:12Z",
+    "commit": "3378f20",
+    "branch": "main",
+    "duration_seconds": 187,
+    "trigger": "push",
+    "stages": {
+      "secret-scan": { "status": "passed", "duration_seconds": 22, "findings": 0 },
+      "sast": { "status": "passed", "duration_seconds": 68, "findings": 6 },
+      "container-security": { "status": "skipped", "duration_seconds": 0, "findings": 0 },
+      "iac-security": { "status": "skipped", "duration_seconds": 0, "findings": 0 },
+      "notify-bunker": { "status": "passed", "duration_seconds": 5, "findings": 0 }
+    }
+  },
+  "vulnerabilities": [
+    { "id": "B602", "title": "Command Injection (shell=True)", "severity": "critical", "file": "vulnerable_app/app.py", "line": 56, "status": "fixed", "cwe": "CWE-78" },
+    { "id": "B201", "title": "Flask debug=True in production", "severity": "high", "file": "vulnerable_app/app.py", "line": 134, "status": "fixed", "cwe": "CWE-94" },
+    { "id": "B105", "title": "Hardcoded secrets (SECRET_KEY, DB password, API key)", "severity": "critical", "file": "vulnerable_app/app.py", "line": 27, "status": "fixed", "cwe": "CWE-798" },
+    { "id": "B608", "title": "SQL Injection via f-string", "severity": "high", "file": "vulnerable_app/app.py", "line": 40, "status": "fixed", "cwe": "CWE-89" },
+    { "id": "B301", "title": "Insecure deserialization (pickle.loads)", "severity": "high", "file": "vulnerable_app/app.py", "line": 70, "status": "fixed", "cwe": "CWE-502" },
+    { "id": "B310", "title": "SSRF via urlopen without validation", "severity": "medium", "file": "vulnerable_app/app.py", "line": 93, "status": "fixed", "cwe": "CWE-918" },
+    { "id": "PATH-01", "title": "Path Traversal (unsanitized file path)", "severity": "high", "file": "vulnerable_app/app.py", "line": 80, "status": "fixed", "cwe": "CWE-22" },
+    { "id": "B104", "title": "Binding to all interfaces (0.0.0.0)", "severity": "medium", "file": "vulnerable_app/app.py", "line": 134, "status": "fixed", "cwe": "CWE-605" },
+    { "id": "DEP-01", "title": "Gunicorn 22.0.0 HTTP smuggling vulnerability", "severity": "medium", "file": "requirements.txt", "line": 1, "status": "open", "cwe": "CVE-72809" }
+  ],
+  "architecture": {
+    "nodes": [
+      { "id": "vpn-hub", "label": "VPN Hub", "type": "server", "ip": "10.10.0.1", "status": "online", "services": ["WireGuard", "Nginx mTLS", "Monitoring"] },
+      { "id": "parrot", "label": "Parrot OS", "type": "workstation", "ip": "10.10.0.2", "status": "online", "services": ["Bandit", "Semgrep", "Claude Code"] },
+      { "id": "agent", "label": "Agent Node", "type": "agent", "ip": "10.10.0.3", "status": "online", "services": ["Docker", "Pipeline Runner", "Trivy"] }
+    ],
+    "connections": [
+      { "from": "parrot", "to": "vpn-hub", "protocol": "WireGuard", "port": 51820 },
+      { "from": "agent", "to": "vpn-hub", "protocol": "WireGuard", "port": 51820 },
+      { "from": "parrot", "to": "agent", "protocol": "mTLS", "port": 443 }
+    ]
+  },
+  "activity_log": [
+    { "timestamp": "2026-02-18T23:45:12Z", "event": "pipeline_complete", "message": "Pipeline passed on main (3378f20)", "level": "success" },
+    { "timestamp": "2026-02-18T23:44:05Z", "event": "stage_complete", "message": "SAST analysis completed — 6 findings (all previously fixed)", "level": "warning" },
+    { "timestamp": "2026-02-18T23:43:22Z", "event": "stage_skip", "message": "Container security skipped — no Dockerfile detected", "level": "info" },
+    { "timestamp": "2026-02-18T23:43:20Z", "event": "stage_skip", "message": "IaC security skipped — no .tf files detected", "level": "info" },
+    { "timestamp": "2026-02-18T23:42:50Z", "event": "stage_complete", "message": "Secret scanning passed — 0 verified secrets found", "level": "success" },
+    { "timestamp": "2026-02-18T23:42:00Z", "event": "pipeline_start", "message": "Pipeline triggered by push to main", "level": "info" },
+    { "timestamp": "2026-02-18T23:30:00Z", "event": "commit", "message": "feat: add docker-hardening-auditor skill with CIS benchmark", "level": "info" },
+    { "timestamp": "2026-02-18T22:15:00Z", "event": "commit", "message": "feat: add secure version of vulnerable app with all fixes", "level": "info" },
+    { "timestamp": "2026-02-18T21:00:00Z", "event": "scan_complete", "message": "Bandit scan: 9 vulnerabilities found in app.py", "level": "warning" },
+    { "timestamp": "2026-02-18T20:30:00Z", "event": "notification", "message": "Telegram + Discord alerts configured for pipeline", "level": "success" },
+    { "timestamp": "2026-02-17T18:00:00Z", "event": "skill_created", "message": "docker-hardening-auditor skill validated and packaged", "level": "success" },
+    { "timestamp": "2026-02-16T14:00:00Z", "event": "repo_init", "message": "Tribu-Lab repository initialized — Bunker DevSecOps Workshop", "level": "info" }
+  ]
+}
