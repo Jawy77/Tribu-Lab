@@ -3,14 +3,14 @@
 [![OWASP Top 10](https://img.shields.io/badge/OWASP-Top%2010%202021-blue.svg)](https://owasp.org/Top10/)
 [![Security Checks](https://img.shields.io/badge/Security%20Checks-12-blueviolet.svg)](#-los-12-checks-de-seguridad)
 [![Workshop](https://img.shields.io/badge/Workshop-500%2B%20attendees-orange.svg)](#)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://python.org)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Copilot-8A2BE2.svg)](https://claude.ai)
 
-# Bunker DevSecOps — 12 Security Checks Automaticos en < 10 min
+<h1 align="center">Bunker DevSecOps — 12 Security Checks Automaticos en < 10 min</h1>
 
-### Workshop de Seguridad con AI | Comunidad Claude Anthropic Colombia | Mantishield
+<p align="center"><strong>Workshop de Seguridad con AI | Comunidad Claude Anthropic Colombia | Mantishield</strong></p>
 
----
-
-> **12 security checks automaticos en cada commit**, alineados con OWASP Top 10 2021, completando en menos de 10 minutos. Costo: **$0**.
+<p align="center"><code>12 security checks automaticos en cada commit, alineados con OWASP Top 10 2021, completando en menos de 10 minutos. Costo: $0.</code></p>
 
 ---
 
@@ -43,7 +43,7 @@ Cada push a `main` y cada Pull Request ejecuta automaticamente estos 12 checks v
 
 | # | Check | Tool | OWASP ID | Detecta |
 |---|---|---|---|---|
-| 1 | Secret Scan (historial) | TruffleHog | A07:2021 | API keys/passwords en commits anteriores |
+| 1 | Secret Scan (historial) | TruffleHog | A07:2021 | API keys y passwords en commits anteriores |
 | 2 | Secret Scan (patterns) | Gitleaks | A07:2021 | Patterns de secrets en codigo actual |
 | 3 | SAST Python | Bandit | A03:2021 | SQLi, CMDi, pickle, debug, hardcoded creds |
 | 4 | SAST Multi-lang | Semgrep | A03:2021 | Injection en cualquier lenguaje |
@@ -56,39 +56,61 @@ Cada push a `main` y cada Pull Request ejecuta automaticamente estos 12 checks v
 | 11 | Security Tests | Pytest (21 tests) | A04:2021 | Validaciones de seguridad en Docker, TF, crypto |
 | 12 | Alert Pipeline | Telegram + Discord | — | Notificaciones real-time a canales del equipo |
 
-> Checks 6-9 son **condicionales**: solo corren si el repo contiene Dockerfile o archivos `.tf`.
+> [!NOTE]
+> Checks 6-9 son **condicionales**: solo corren si el repo contiene Dockerfile o archivos `.tf`. El pipeline detecta automaticamente su presencia.
 
 ---
 
 ## Arquitectura — La Trinidad
 
 ```
-                        RED PRIVADA WIREGUARD
-                          10.13.13.0/24
-
-   +-----------------+    +-----------------+    +--------------------+
-   |    VPN Hub      |    |   Parrot OS     |    |    EC2-Agent       |
-   |   10.13.13.1    |<-->|   10.13.13.2    |<-->|    10.13.13.4      |
-   |   Gateway       |    |   Workstation   |    |   OpenClaw Bot     |
-   |   NAT/FW        |    |   Claude Code   |    |   Docker + AI      |
-   +-----------------+    +-----------------+    +--------------------+
-          |                       |                       |
-          +-----------------------+-----------------------+
++=====================================================================+
+|                     RED PRIVADA WIREGUARD                           |
+|                       10.13.13.0/24                                 |
+|                                                                     |
+|  +-------------------+  +-------------------+  +-----------------+  |
+|  |                   |  |                   |  |                 |  |
+|  |     VPN HUB       |  |    PARROT OS      |  |   EC2-AGENT     |  |
+|  |    10.13.13.1     |  |    10.13.13.2     |  |   10.13.13.4    |  |
+|  |                   |  |                   |  |                 |  |
+|  |  WireGuard GW     |  |  Claude Code      |  |  OpenClaw Bot   |  |
+|  |  NAT / Firewall   |  |  Bandit + Semgrep |  |  Docker Engine  |  |
+|  |  Nginx mTLS       |  |  Security Audit   |  |  Trivy Scanner  |  |
+|  |                   |  |                   |  |                 |  |
+|  +--------+----------+  +--------+----------+  +-------+---------+  |
+|           |                      |                      |           |
+|           |    WireGuard :51820  |    WireGuard :51820   |           |
+|           +----------------------+----------------------+           |
+|                                  |                                  |
+|                        Split Tunneling                              |
+|                  (Internet local + VPN privada)                     |
++=====================================================================+
+                                   |
+                                   | git push / PR
+                                   v
+                  +================================+
+                  |       GITHUB ACTIONS            |
+                  |                                |
+                  |  [Secret Scan] --> [SAST]      |
+                  |       |              |         |
+                  |       v              v         |
+                  |  [Dep Check] --> [Build]       |
+                  |       |              |         |
+                  |       v              v         |
+                  |  [Container] --> [IaC Scan]    |
+                  |       |              |         |
+                  |       v              v         |
+                  |     [Tests] --> [Notify]       |
+                  +===============+================+
                                   |
-                        Split Tunneling
-                  (Internet local + VPN privada)
-
-              +-------------------------------+
-              |       GitHub Actions          |
-              |  Secret Scan -> SAST -> Deps  |
-              |  Container -> IaC -> Notify   |
-              +---------------+---------------+
-                              | webhook
-                              v
-                 +-------------------------+
-                 |   Telegram + Discord    |
-                 |   Alertas real-time     |
-                 +-------------------------+
+                    +-------------+-------------+
+                    |                           |
+                    v                           v
+          +-----------------+         +-----------------+
+          |   TELEGRAM      |         |    DISCORD      |
+          |   Bot Alert     |         |   Webhook Embed |
+          |   (real-time)   |         |   (green/red)   |
+          +-----------------+         +-----------------+
 ```
 
 ---
@@ -96,38 +118,100 @@ Cada push a `main` y cada Pull Request ejecuta automaticamente estos 12 checks v
 ## Quick Start
 
 ```bash
-# 1. Clonar el repositorio
 git clone https://github.com/Jawy77/Tribu-Lab.git
 cd Tribu-Lab
+pip install -r requirements.txt
 
-# 2. Crear entorno virtual e instalar herramientas
-python3 -m venv .venv
-source .venv/bin/activate
-pip install bandit semgrep safety pytest
+# Ver las vulnerabilidades
+bandit -r vulnerable_app/ -ll
 
-# 3. Ejecutar los scans de seguridad
-./scripts/run_security_checks.sh
-
-# 4. Ejecutar los tests
+# Ejecutar tests
 pytest tests/ -v
 
-# 5. (Opcional) Configurar alertas
-cp .env.example .env
-# Editar .env con TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL
+# Demo interactivo completo
+bash scripts/demo_live.sh
+
+# Para pipeline en GitHub Actions: haz fork y configura secrets
 ```
 
-### Demo en Vivo
+### Demo en Vivo (2 terminales)
 
 ```bash
-# Abre el dashboard en un browser
-cd monitoring && python3 -m http.server 8080 &
-# -> http://localhost:8080/dashboard.html
+# Terminal 1 — Dashboard (dejar abierto)
+cd monitoring && python3 -m http.server 8080
+# Abrir en browser: http://localhost:8080/dashboard.html
 
-# Corre el demo interactivo (presiona ENTER entre stages)
+# Terminal 2 — Demo interactivo
 bash scripts/demo_live.sh
+# Presiona ENTER para avanzar entre cada stage
+# Las alertas llegan a Telegram/Discord en tiempo real
+# El dashboard se actualiza cada 10 segundos automaticamente
 ```
 
-El dashboard se actualiza en tiempo real y las alertas llegan a Telegram/Discord conforme cada stage se ejecuta.
+---
+
+## Configuracion para tu propio Bunker
+
+El pipeline necesita 3 secrets en GitHub para enviar notificaciones. Sin ellos el pipeline funciona igual, pero los stages de alerta se saltan silenciosamente.
+
+### Paso 1 — Crear un Bot de Telegram
+
+```
+1. Abre Telegram y busca @BotFather
+2. Envia /newbot
+3. Asigna un nombre: "DevSecOps Bunker Bot"
+4. Asigna un username: tu_bunker_bot
+5. BotFather te devuelve el token:
+   -> 7123456789:AAF1xxxxxxxxxxxxxxxxxxxxxxxxxxx
+6. Guarda ese valor como TELEGRAM_BOT_TOKEN
+```
+
+### Paso 2 — Obtener el Chat ID de Telegram
+
+```
+1. Crea un grupo en Telegram o usa uno existente
+2. Agrega tu bot al grupo
+3. Envia cualquier mensaje al grupo
+4. Abre en un browser:
+   -> https://api.telegram.org/bot<TU_TOKEN>/getUpdates
+5. Busca "chat":{"id":-100XXXXXXXXXX}
+6. Ese numero negativo es tu TELEGRAM_CHAT_ID
+```
+
+### Paso 3 — Crear un Webhook de Discord
+
+```
+1. Abre Discord y ve al canal donde quieres las alertas
+2. Click en el engranaje del canal -> Integraciones -> Webhooks
+3. Click "Nuevo Webhook"
+4. Asigna nombre: "Bunker DevSecOps"
+5. Click "Copiar URL del Webhook"
+6. Esa URL es tu DISCORD_WEBHOOK_URL
+   -> https://discord.com/api/webhooks/123456789/ABCxyz...
+```
+
+### Paso 4 — Configurar en GitHub
+
+```
+1. Ve a tu fork: github.com/<tu-user>/Tribu-Lab
+2. Settings -> Secrets and variables -> Actions
+3. Click "New repository secret" tres veces:
+```
+
+| Secret Name | Valor | Ejemplo |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | Token del paso 1 | `7123456789:AAF1xxx...` |
+| `TELEGRAM_CHAT_ID` | Chat ID del paso 2 | `-1001234567890` |
+| `DISCORD_WEBHOOK_URL` | URL del paso 3 | `https://discord.com/api/webhooks/...` |
+
+### Paso 5 — Para demo local (opcional)
+
+```bash
+cp .env.example .env
+nano .env
+# Pega los mismos 3 valores
+# El script demo_live.sh los lee automaticamente
+```
 
 ---
 
@@ -135,88 +219,129 @@ El dashboard se actualiza en tiempo real y las alertas llegan a Telegram/Discord
 
 ```
 Tribu-Lab/
-+-- .github/workflows/       Pipeline CI/CD con 12 security gates
-|   +-- devsecops-pipeline.yml
-+-- vulnerable_app/           App intencionalmente vulnerable (DEMO ONLY)
-|   +-- app.py                7 vulnerabilidades plantadas
-|   +-- app_secure.py         Version corregida (0 findings Medium+)
-|   +-- requirements.txt
-+-- monitoring/               Dashboard de monitoreo real-time
-|   +-- dashboard.html        React + Tailwind (dark cybersecurity theme)
-|   +-- status.json           Data que se actualiza con cada scan
+|
++-- .github/workflows/
+|   +-- devsecops-pipeline.yml       12 security gates automaticos
+|
++-- vulnerable_app/                   DEMO ONLY - codigo vulnerable
+|   +-- app.py                        7 vulnerabilidades plantadas (OWASP Top 10)
+|   +-- app_secure.py                 Version corregida (0 findings Medium+)
+|   +-- requirements.txt              Dependencias con 1 CVE conocido
+|
++-- monitoring/
+|   +-- dashboard.html                Panel real-time (React 18 + Tailwind)
+|   +-- status.json                   Estado del pipeline (auto-refresh 10s)
+|
 +-- scripts/
-|   +-- demo_live.sh          Demo interactivo paso a paso
-|   +-- run_security_checks.sh  Ejecutar todos los scans localmente
-|   +-- verify_bunker.sh      Health check de la infraestructura
-|   +-- generate_mtls_certs.sh  Generar PKI para mTLS
-|   +-- update_dashboard_status.py  Helper para actualizar dashboard
+|   +-- demo_live.sh                  Demo interactivo para audiencia en vivo
+|   +-- run_security_checks.sh        Ejecutar los 12 checks localmente
+|   +-- update_dashboard_status.py    Actualizar dashboard en tiempo real
+|   +-- verify_bunker.sh              Health check de la infraestructura VPN
+|   +-- generate_mtls_certs.sh        Generar PKI completa para mTLS
+|
 +-- skills/
-|   +-- devsecops-pipeline/   Skill para Claude Code
-|   +-- docker-hardening-auditor/  Skill de auditoria Docker
+|   +-- devsecops-pipeline/           Skill de Claude Code (pipeline audit)
+|   +-- docker-hardening-auditor/     Skill de Claude Code (Docker CIS)
+|   +-- package_skill.py              Empaquetador de skills (.skill)
+|   +-- quick_validate.py             Validador de estructura de skills
+|
 +-- tests/
-|   +-- test_security.py      21 tests (Docker, Terraform, Crypto, SAST)
-+-- terraform/                IaC para AWS (la trinidad)
-+-- docker/                   Dockerfiles hardened
-+-- configs/                  WireGuard, Nginx
-+-- docs/                     Guias y cheatsheets
+|   +-- test_security.py              21 tests: Docker, Terraform, Crypto, SAST
+|
++-- terraform/                        IaC para AWS (la trinidad)
+|   +-- main.tf
+|   +-- modules/
+|
++-- docker/                           Dockerfiles hardened
+|   +-- app/
+|   +-- openclaw/
+|
++-- configs/                          Configuraciones de red
+|   +-- wireguard/                    Peers VPN (Hub, Parrot, Agent)
+|   +-- nginx/                        Reverse proxy con mTLS
+|
++-- docs/
+|   +-- CHEATSHEET.md                 Comandos rapidos para el taller
+|   +-- GUIDE-CREATING-SKILLS.md      Guia para crear skills de Claude Code
 ```
 
 ---
 
 ## Agenda del Taller (2 horas)
 
-| Tiempo | Modulo | Descripcion |
+| Tiempo | Modulo | Que se hace |
 |---|---|---|
-| 00:00 - 00:25 | **Pipeline DevSecOps** | GitHub Actions + SAST (Bandit/Semgrep) + Trivy + tfsec |
-| 00:25 - 00:50 | **Skills para Claude Code** | Crear, auditar y empaquetar skills |
-| 00:50 - 01:15 | **El Bunker del Bot** | Docker hardening, OpenClaw aislado, WireGuard |
-| 01:15 - 01:35 | **Criptografia Aplicada** | mTLS, Ed25519, TLS 1.3, zero-trust |
-| 01:35 - 02:00 | **Demo End-to-End + Q&A** | Pipeline completo + alertas en vivo |
+| 00:00 - 00:25 | **Pipeline DevSecOps** | Configurar GitHub Actions con Bandit, Semgrep, Trivy, tfsec. Ver alertas llegar a Telegram y Discord. |
+| 00:25 - 00:50 | **Skills para Claude Code** | Crear un skill desde cero, validarlo, empaquetarlo como `.skill` y probarlo. |
+| 00:50 - 01:15 | **El Bunker del Bot** | Docker hardening con CIS Benchmark, OpenClaw aislado en VPN, WireGuard split tunneling. |
+| 01:15 - 01:35 | **Criptografia Aplicada** | Generar CA propia, certificados mTLS, Ed25519 para SSH, TLS 1.3 en Nginx. |
+| 01:35 - 02:00 | **Demo End-to-End + Q&A** | Ejecutar `demo_live.sh` completo con dashboard en pantalla y alertas en tiempo real. |
 
 ---
 
-## Herramientas Utilizadas
+## Stack Tecnologico
 
-| Categoria | Herramientas |
+| Capa | Tecnologias |
 |---|---|
+| **AI y Copiloto** | Claude Code, OpenClaw Bot |
 | **CI/CD** | GitHub Actions |
-| **SAST** | Bandit, Semgrep |
-| **Secret Scanning** | TruffleHog, Gitleaks |
-| **Dependencies** | Safety, pip-audit |
-| **Containers** | Trivy, Hadolint, Docker |
-| **IaC** | tfsec, Checkov, Terraform |
-| **Testing** | Pytest |
+| **SAST** | Bandit (Python), Semgrep (multi-lenguaje) |
+| **Secret Scanning** | TruffleHog (historial git), Gitleaks (patterns) |
+| **Dependency Audit** | Safety, pip-audit |
+| **Container Security** | Trivy (CVEs), Hadolint (Dockerfile lint) |
+| **IaC Security** | tfsec (Terraform), Checkov (CIS/NIST compliance) |
+| **Testing** | Pytest (21 security tests) |
 | **Alerting** | Telegram Bot API, Discord Webhooks |
-| **Monitoring** | Dashboard custom (React + Tailwind) |
-| **AI Copilot** | Claude Code |
-| **Network** | WireGuard VPN, Nginx mTLS |
-| **Crypto** | TLS 1.3, Ed25519, X.509 |
+| **Monitoring** | Dashboard custom React 18 + Tailwind CSS |
+| **Network** | WireGuard VPN (split tunneling), Nginx con mTLS |
+| **Crypto** | TLS 1.3, Ed25519, X.509, Mutual TLS |
+| **IaC** | Terraform (AWS), Docker, Docker Compose |
+| **Lenguaje** | Python 3.10+ |
 
 ---
 
 ## Nota de Seguridad
 
 > [!IMPORTANT]
-> - **NUNCA** subas llaves privadas, tokens, o archivos `.env` al repositorio
-> - Este repo usa `.gitignore` estricto y secrets de GitHub Actions
-> - Las llaves y certificados en `crypto/` son **ejemplos** — genera los tuyos propios
-> - El pipeline usa `--only-verified` en TruffleHog para reducir falsos positivos
-> - Container e IaC scans son condicionales (solo si hay Dockerfile / .tf)
+> Este repositorio es **exclusivamente educativo**. El directorio `vulnerable_app/` existe para demostrar como las herramientas DevSecOps detectan vulnerabilidades reales. Todos los secrets incluidos en el codigo son valores falsos que no funcionan en ningun servicio. Las llaves y certificados en `crypto/` son ejemplos generados para el taller. El pipeline usa `--only-verified` en TruffleHog para reducir falsos positivos. Los scans de Container e IaC son condicionales y solo corren si el repo contiene Dockerfile o archivos `.tf`.
+
+---
+
+## Creditos
+
+| Rol | Nombre |
+|---|---|
+| **Autor y Facilitador** | Jawy Romero ([@hackwy](https://github.com/Jawy77)) |
+| **Organizacion** | [Mantishield](https://mantishield.com) |
+| **Comunidad** | Claude Anthropic Colombia, Tribu AI Colombia y Latam |
+| **Proyecto OpenClaw** | Bot de seguridad aislado en VPN |
 
 ---
 
 ## Licencia
 
-MIT — Hecho por [Mantishield](https://mantishield.com) para la Comunidad Tribu Colombia y Latam.
+```
+MIT License
 
-## Creditos
+Copyright (c) 2026 Jawy Romero / Mantishield
 
-- **Jawy** — Mantishield / Cybersecurity Researcher
-- **Comunidad Tribu AI Colombia**
-- **OpenClaw Project**
+Se concede permiso, de forma gratuita, a cualquier persona que obtenga una
+copia de este software y los archivos de documentacion asociados, para
+utilizar el Software sin restriccion, incluyendo sin limitacion los derechos
+de usar, copiar, modificar, fusionar, publicar, distribuir, sublicenciar
+y/o vender copias del Software.
+
+NOTA EDUCATIVA: Este repositorio contiene codigo intencionalmente vulnerable
+con fines de ensenanza. El uso de vulnerable_app/ fuera de un entorno
+controlado de laboratorio es bajo responsabilidad exclusiva del usuario.
+Los autores no se hacen responsables de danos derivados del mal uso del
+codigo vulnerable incluido en este repositorio.
+```
 
 ---
 
 <p align="center">
-  <sub>Bunker DevSecOps &middot; 12 Checks &middot; OWASP Top 10 &middot; $0 cost &middot; < 10 min</sub>
+  <strong>Bunker DevSecOps</strong><br>
+  <sub>12 Checks | OWASP Top 10 | $0 cost | < 10 min | 500+ attendees</sub><br>
+  <sub>Hecho con seguridad por <a href="https://github.com/Jawy77">@hackwy</a> para la comunidad</sub>
 </p>
