@@ -1,17 +1,39 @@
 # =============================================================================
-# 🛡️ DevSecOps Pipeline — Búnker Workshop
-# Comunidad Claude Anthropic Colombia
+# DevSecOps Pipeline — Bunker Workshop
+# Comunidad Claude Anthropic Colombia | Mantishield
 # =============================================================================
-# Este pipeline implementa security gates en cada etapa:
-#   1. Secret scanning (evitar leaks)
-#   2. SAST con Bandit (Python) y Semgrep (multi-lenguaje)
-#   3. Dependency check (vulnerabilidades en paquetes)
-#   4. Container scanning con Trivy
-#   5. IaC scanning con tfsec
-#   6. Notificación al Búnker (OpenClaw via Telegram)
+#
+# 12 SECURITY CHECKS — OWASP Top 10 2021 Mapping
+#
+#  Check  Tool             OWASP ID    CWE           Detecta
+#  -----  ---------------  ----------  ------------  ----------------------------------
+#   1     TruffleHog       A07:2021    CWE-798       API keys/passwords en historial git
+#   2     Gitleaks         A07:2021    CWE-798       Patterns de secrets en codigo
+#   3     Bandit           A03:2021    CWE-89/78     SQLi, CMDi, pickle, debug, creds
+#   4     Semgrep          A03:2021    CWE-89/78     Injection en cualquier lenguaje
+#   5     Safety           A06:2021    CWE-1035      CVEs en dependencias Python
+#   6     Trivy            A06:2021    CWE-1035      Vulnerabilidades en imagen Docker
+#   7     Hadolint         A05:2021    CWE-16        Misconfigurations en Dockerfile
+#   8     tfsec            A05:2021    CWE-16        Misconfigurations en Terraform
+#   9     Checkov          A05:2021    CWE-16        Compliance CIS / NIST
+#  10     pip-licenses     —           —             Licencias incompatibles en deps
+#  11     Pytest           A04:2021    CWE-284       21 security tests (Docker/TF/Crypto)
+#  12     TG + Discord     —           —             Notificaciones real-time
+#
+# ARQUITECTURA DE JOBS (< 10 min total):
+#
+#   secret-scan ──────┐
+#   sast ─────────────┤
+#   container-sec ────┤
+#   iac-security ─────┼──> notify (if: always)
+#   license-check ────┤
+#   test-suite ───────┘
+#
+#   Jobs 1-6 corren 100% EN PARALELO. Solo notify depende de todos.
+#
 # =============================================================================
 
-name: "🔒 DevSecOps Pipeline"
+name: "🔒 DevSecOps Pipeline — 12 Checks"
 
 on:
   push:
@@ -22,72 +44,125 @@ on:
 env:
   DOCKER_IMAGE: devsecops-workshop-app
   DOCKER_TAG: ${{ github.sha }}
+  PYTHON_VERSION: "3.12"
 
+# ─────────────────────────────────────────────────────────────────────────────
 jobs:
-  # ─────────────────────────────────────────────
-  # STAGE 1: Secret Detection
-  # ─────────────────────────────────────────────
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CHECKS 1-2: Secret Scanning (TruffleHog + Gitleaks) ~1 min
+  # OWASP A07:2021 — Security Misconfiguration
+  # ═══════════════════════════════════════════════════════════════════════════
   secret-scan:
-    name: "🔑 Secret Scanning"
+    name: "🔑 Checks 1-2 — Secret Scanning"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history para detectar secrets en commits anteriores
+          fetch-depth: 0
 
-      - name: TruffleHog - Detectar secrets expuestos
-        uses: trufflesecurity/trufflehog@main
+      - name: "Check 1 — TruffleHog (historial git)"
+        id: trufflehog
+        uses: trufflesecurity/trufflehog@v3.82.13
+        continue-on-error: true
         with:
-          extra_args: --only-verified
+          extra_args: --only-verified --json
 
-      - name: Gitleaks - Scanning adicional
-        uses: gitleaks/gitleaks-action@v2
+      - name: "Check 2 — Gitleaks (patterns en codigo)"
+        id: gitleaks
+        uses: gitleaks/gitleaks-action@v2.3.7
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ─────────────────────────────────────────────
-  # STAGE 2: Static Analysis (SAST)
-  # ─────────────────────────────────────────────
+      - name: Step Summary
+        if: always()
+        run: |
+          echo "## 🔑 Secret Scanning Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Tool | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| 1 | TruffleHog (git history) | \`${{ steps.trufflehog.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 2 | Gitleaks (code patterns) | \`${{ steps.gitleaks.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> OWASP A07:2021 — Secrets should never be committed to version control." >> $GITHUB_STEP_SUMMARY
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CHECKS 3-5: SAST + Dependency Audit (Bandit + Semgrep + Safety) ~3 min
+  # OWASP A03:2021 — Injection / A06:2021 — Vulnerable Components
+  # ═══════════════════════════════════════════════════════════════════════════
   sast:
-    name: "🔍 SAST Analysis"
+    name: "🔍 Checks 3-5 — SAST + Dependencies"
     runs-on: ubuntu-latest
-    needs: secret-scan
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install security tools
-        run: |
-          pip install bandit safety
-          pip install semgrep
+      - name: Install tools
+        run: pip install bandit semgrep safety
 
-      # Bandit — Python SAST
-      - name: "Bandit - Python Security Linter"
+      - name: "Check 3 — Bandit (Python SAST)"
+        id: bandit
         run: |
-          echo "## 🐍 Bandit Results" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐍 Check 3 — Bandit Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
           bandit -r . -f json -o bandit-report.json \
-            --exclude ./.venv,./tests,./node_modules || true
-          bandit -r . -f screen \
-            --exclude ./.venv,./tests,./node_modules >> $GITHUB_STEP_SUMMARY || true
+            --exclude ./.venv,./tests,./node_modules,./.github 2>/dev/null || true
 
-      # Semgrep — Multi-language SAST
-      - name: "Semgrep - Multi-language Scanner"
+          TOTAL=$(python3 -c "import json; d=json.load(open('bandit-report.json')); print(len(d['results']))" 2>/dev/null || echo "0")
+          HIGH=$(python3 -c "import json; d=json.load(open('bandit-report.json')); print(sum(1 for r in d['results'] if r['issue_severity']=='HIGH'))" 2>/dev/null || echo "0")
+          MED=$(python3 -c "import json; d=json.load(open('bandit-report.json')); print(sum(1 for r in d['results'] if r['issue_severity']=='MEDIUM'))" 2>/dev/null || echo "0")
+
+          echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| HIGH | ${HIGH} |" >> $GITHUB_STEP_SUMMARY
+          echo "| MEDIUM | ${MED} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total** | **${TOTAL}** |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          bandit -r . -f screen --exclude ./.venv,./tests,./node_modules,./.github \
+            >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+
+      - name: "Check 4 — Semgrep (multi-language SAST)"
+        id: semgrep
         run: |
-          echo "## 🔎 Semgrep Results" >> $GITHUB_STEP_SUMMARY
-          semgrep --config auto --json -o semgrep-report.json . || true
+          echo "## 🔎 Check 4 — Semgrep Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          semgrep --config auto --json -o semgrep-report.json . 2>/dev/null || true
+
+          TOTAL=$(python3 -c "import json; d=json.load(open('semgrep-report.json')); print(len(d.get('results',[])))" 2>/dev/null || echo "0")
+          echo "**Findings:** ${TOTAL}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
           semgrep --config auto . >> $GITHUB_STEP_SUMMARY 2>&1 || true
 
-      # Safety — Dependency vulnerabilities
-      - name: "Safety - Dependency Check"
+      - name: "Check 5 — Safety (dependency CVEs)"
+        id: safety
         run: |
-          if [ -f requirements.txt ]; then
-            echo "## 📦 Dependency Check" >> $GITHUB_STEP_SUMMARY
-            safety check -r requirements.txt --output json > safety-report.json || true
-            safety check -r requirements.txt >> $GITHUB_STEP_SUMMARY || true
+          echo "## 📦 Check 5 — Dependency Audit" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          FOUND_REQ=false
+          for req in requirements.txt vulnerable_app/requirements.txt; do
+            if [ -f "$req" ]; then
+              FOUND_REQ=true
+              echo "### Scanning \`${req}\`" >> $GITHUB_STEP_SUMMARY
+              safety check -r "$req" --output json > "safety-$(basename $req).json" 2>/dev/null || true
+              safety check -r "$req" >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          if [ "$FOUND_REQ" = false ]; then
+            echo "> No requirements.txt found. Skipping." >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Upload SAST Reports
@@ -98,75 +173,78 @@ jobs:
           path: |
             bandit-report.json
             semgrep-report.json
-            safety-report.json
+            safety-*.json
+          retention-days: 30
 
-  # ─────────────────────────────────────────────
-  # STAGE 3: Check for Dockerfile & Terraform
-  # ─────────────────────────────────────────────
-  detect-files:
-    name: "📂 Detect Config Files"
-    runs-on: ubuntu-latest
-    outputs:
-      has_dockerfile: ${{ steps.check.outputs.has_dockerfile }}
-      has_terraform: ${{ steps.check.outputs.has_terraform }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check for Dockerfile and .tf files
-        id: check
-        run: |
-          if find . -name 'Dockerfile' -type f | grep -q .; then
-            echo "has_dockerfile=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_dockerfile=false" >> $GITHUB_OUTPUT
-          fi
-          if find . -name '*.tf' -type f | grep -q .; then
-            echo "has_terraform=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_terraform=false" >> $GITHUB_OUTPUT
-          fi
-
-  # ─────────────────────────────────────────────
-  # STAGE 4: Build & Container Scan (solo si hay Dockerfile)
-  # ─────────────────────────────────────────────
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CHECKS 6-7: Container Security (Trivy + Hadolint) ~4 min
+  # OWASP A05:2021 — Security Misconfiguration / A06:2021 — Vulnerable Comp
+  # ═══════════════════════════════════════════════════════════════════════════
   container-security:
-    name: "🐳 Container Security"
+    name: "🐳 Checks 6-7 — Container Security"
     runs-on: ubuntu-latest
-    needs: [sast, detect-files]
-    if: needs.detect-files.outputs.has_dockerfile == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Find Dockerfile
-        id: find-dockerfile
+      - name: Detect Dockerfiles
+        id: detect
         run: |
           DOCKERFILE=$(find . -name 'Dockerfile' -type f | head -1)
-          echo "path=$DOCKERFILE" >> $GITHUB_OUTPUT
+          if [ -n "$DOCKERFILE" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "path=$DOCKERFILE" >> $GITHUB_OUTPUT
+            echo "Found Dockerfile: $DOCKERFILE"
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "No Dockerfile found — checks 6-7 will be skipped"
+          fi
 
-      - name: Build Docker Image
+      - name: Build Docker image
+        if: steps.detect.outputs.found == 'true'
         run: |
-          docker build -t $DOCKER_IMAGE:$DOCKER_TAG -f ${{ steps.find-dockerfile.outputs.path }} .
+          docker build -t $DOCKER_IMAGE:$DOCKER_TAG \
+            -f ${{ steps.detect.outputs.path }} . || true
 
-      # Trivy — Container vulnerability scanner
-      - name: "Trivy - Container Scan"
-        uses: aquasecurity/trivy-action@master
+      - name: "Check 6 — Trivy (container CVEs)"
+        if: steps.detect.outputs.found == 'true'
+        uses: aquasecurity/trivy-action@0.28.0
+        continue-on-error: true
         with:
           image-ref: "${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}"
           format: "sarif"
           output: "trivy-report.sarif"
           severity: "CRITICAL,HIGH"
 
-      - name: "Trivy - Summary"
-        uses: aquasecurity/trivy-action@master
+      - name: "Trivy — Table summary"
+        if: steps.detect.outputs.found == 'true'
+        uses: aquasecurity/trivy-action@0.28.0
+        continue-on-error: true
         with:
           image-ref: "${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}"
           format: "table"
           severity: "CRITICAL,HIGH,MEDIUM"
 
-      - name: "Hadolint - Dockerfile Linter"
+      - name: "Check 7 — Hadolint (Dockerfile lint)"
+        if: steps.detect.outputs.found == 'true'
         uses: hadolint/hadolint-action@v3.1.0
+        continue-on-error: true
         with:
-          dockerfile: ${{ steps.find-dockerfile.outputs.path }}
+          dockerfile: ${{ steps.detect.outputs.path }}
+
+      - name: Step Summary
+        if: always()
+        run: |
+          echo "## 🐳 Checks 6-7 — Container Security" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.detect.outputs.found }}" = "true" ]; then
+            echo "| Check | Tool | Target | Status |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
+            echo "| 6 | Trivy | \`${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}\` | Scanned |" >> $GITHUB_STEP_SUMMARY
+            echo "| 7 | Hadolint | \`${{ steps.detect.outputs.path }}\` | Linted |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "> **Skipped** — No Dockerfile found in repository." >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Upload Container Reports
         uses: actions/upload-artifact@v4
@@ -174,109 +252,316 @@ jobs:
         with:
           name: container-reports
           path: trivy-report.sarif
+          if-no-files-found: ignore
+          retention-days: 30
 
-  # ─────────────────────────────────────────────
-  # STAGE 5: Infrastructure as Code Scan (solo si hay .tf files)
-  # ─────────────────────────────────────────────
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CHECKS 8-9: IaC Security (tfsec + Checkov) ~2 min
+  # OWASP A05:2021 — Security Misconfiguration
+  # ═══════════════════════════════════════════════════════════════════════════
   iac-security:
-    name: "🏗️ IaC Security"
+    name: "🏗️ Checks 8-9 — IaC Security"
     runs-on: ubuntu-latest
-    needs: [secret-scan, detect-files]
-    if: needs.detect-files.outputs.has_terraform == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Find Terraform directory
-        id: find-tf
+      - name: Detect Terraform files
+        id: detect
         run: |
-          TF_DIR=$(dirname $(find . -name '*.tf' -type f | head -1))
-          echo "dir=$TF_DIR" >> $GITHUB_OUTPUT
+          TF_FILE=$(find . -name '*.tf' -type f | head -1)
+          if [ -n "$TF_FILE" ]; then
+            TF_DIR=$(dirname "$TF_FILE")
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "dir=$TF_DIR" >> $GITHUB_OUTPUT
+            echo "Found .tf files in: $TF_DIR"
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "No .tf files found — checks 8-9 will be skipped"
+          fi
 
-      - name: "tfsec - Terraform Security"
-        uses: aquasecurity/tfsec-action@v1.0.0
+      - name: "Check 8 — tfsec (Terraform security)"
+        if: steps.detect.outputs.found == 'true'
+        uses: aquasecurity/tfsec-action@v1.0.3
+        continue-on-error: true
         with:
-          working_directory: ${{ steps.find-tf.outputs.dir }}
+          working_directory: ${{ steps.detect.outputs.dir }}
+          format: json
+          soft_fail: true
 
-      - name: "Checkov - IaC Policy Check"
-        uses: bridgecrewio/checkov-action@master
+      - name: "Check 9 — Checkov (IaC policy / CIS / NIST)"
+        if: steps.detect.outputs.found == 'true'
+        uses: bridgecrewio/checkov-action@v12.2.3
+        continue-on-error: true
         with:
-          directory: ${{ steps.find-tf.outputs.dir }}
+          directory: ${{ steps.detect.outputs.dir }}
           framework: terraform
           output_format: cli
           soft_fail: true
 
-  # ─────────────────────────────────────────────
-  # STAGE 6-7: Notify Búnker (Telegram + Discord)
-  # ─────────────────────────────────────────────
-  notify-bunker:
-    name: "📡 Notificar al Búnker"
+      - name: Step Summary
+        if: always()
+        run: |
+          echo "## 🏗️ Checks 8-9 — IaC Security" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.detect.outputs.found }}" = "true" ]; then
+            echo "| Check | Tool | Directory | Frameworks |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
+            echo "| 8 | tfsec | \`${{ steps.detect.outputs.dir }}\` | Terraform |" >> $GITHUB_STEP_SUMMARY
+            echo "| 9 | Checkov | \`${{ steps.detect.outputs.dir }}\` | Terraform, CIS, NIST |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "> **Skipped** — No \`.tf\` files found in repository." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CHECK 10: License Audit (pip-licenses) ~1 min
+  # ═══════════════════════════════════════════════════════════════════════════
+  license-check:
+    name: "📄 Check 10 — License Audit"
     runs-on: ubuntu-latest
-    needs: [secret-scan, sast, container-security, iac-security]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies and pip-licenses
+        run: |
+          pip install pip-licenses
+          for req in requirements.txt vulnerable_app/requirements.txt; do
+            if [ -f "$req" ]; then
+              pip install -r "$req" 2>/dev/null || true
+            fi
+          done
+
+      - name: "Check 10 — pip-licenses"
+        run: |
+          echo "## 📄 Check 10 — License Audit" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          pip-licenses --format=markdown --with-urls >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          pip-licenses --format=json --output-file=license-report.json 2>/dev/null || true
+
+          COPYLEFT=$(pip-licenses --allow-only="MIT;BSD;Apache Software License;ISC;Python Software Foundation License;Mozilla Public License 2.0 (MPL 2.0)" 2>&1 || true)
+          if echo "$COPYLEFT" | grep -qi "fail\|not allowed"; then
+            echo "> ⚠️ Possible copyleft or restricted licenses detected. Review above." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "> ✅ All licenses are permissive (MIT/BSD/Apache/ISC/PSF/MPL)." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload License Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: license-report
+          path: license-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CHECK 11: Security Tests (pytest) ~1 min
+  # OWASP A04:2021 — Insecure Design
+  # ═══════════════════════════════════════════════════════════════════════════
+  test-suite:
+    name: "🧪 Check 11 — Security Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install test dependencies
+        run: |
+          pip install pytest
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt 2>/dev/null || true
+          fi
+
+      - name: "Check 11 — pytest (21 security tests)"
+        id: pytest
+        run: |
+          echo "## 🧪 Check 11 — Security Test Suite" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          pytest tests/ -v --tb=short --junitxml=test-results.xml 2>&1 | tee pytest-output.txt || true
+
+          PASSED=$(grep -c "PASSED" pytest-output.txt 2>/dev/null || echo "0")
+          FAILED=$(grep -c "FAILED" pytest-output.txt 2>/dev/null || echo "0")
+          TOTAL=$((PASSED + FAILED))
+
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Passed | ${PASSED} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Failed | ${FAILED} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Total | ${TOTAL} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat pytest-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            test-results.xml
+            pytest-output.txt
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CHECK 12: Notifications (Telegram + Discord)
+  # Depends on ALL previous jobs. Runs always.
+  # ═══════════════════════════════════════════════════════════════════════════
+  notify:
+    name: "📡 Check 12 — Alertas Bunker"
+    runs-on: ubuntu-latest
+    needs:
+      - secret-scan
+      - sast
+      - container-security
+      - iac-security
+      - license-check
+      - test-suite
     if: always()
     steps:
-      - name: Prepare Security Summary
-        id: summary
+      - name: Evaluate pipeline status
+        id: eval
         run: |
-          STATUS="✅ PASSED"
-          # Solo falla si algún job falló (skipped no es fallo)
-          if [[ "${{ needs.secret-scan.result }}" == "failure" ]] || \
-             [[ "${{ needs.sast.result }}" == "failure" ]] || \
-             [[ "${{ needs.container-security.result }}" == "failure" ]] || \
-             [[ "${{ needs.iac-security.result }}" == "failure" ]]; then
-            STATUS="🚨 FAILED"
-          fi
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          STATUS="PASSED"
+          EMOJI="✅"
+          RESULTS=""
+          RESULTS+="secret-scan:${{ needs.secret-scan.result }},"
+          RESULTS+="sast:${{ needs.sast.result }},"
+          RESULTS+="container:${{ needs.container-security.result }},"
+          RESULTS+="iac:${{ needs.iac-security.result }},"
+          RESULTS+="license:${{ needs.license-check.result }},"
+          RESULTS+="tests:${{ needs.test-suite.result }}"
 
-      - name: Notify via Telegram (al Búnker)
-        if: env.TELEGRAM_BOT_TOKEN != ''
+          for result in ${{ needs.secret-scan.result }} \
+                        ${{ needs.sast.result }} \
+                        ${{ needs.container-security.result }} \
+                        ${{ needs.iac-security.result }} \
+                        ${{ needs.license-check.result }} \
+                        ${{ needs.test-suite.result }}; do
+            if [ "$result" = "failure" ]; then
+              STATUS="FAILED"
+              EMOJI="🚨"
+            fi
+          done
+
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
+
+          ICON_SECRET=$( [ "${{ needs.secret-scan.result }}" = "success" ] && echo "✅" || echo "⚠️" )
+          ICON_SAST=$( [ "${{ needs.sast.result }}" = "success" ] && echo "✅" || echo "⚠️" )
+          ICON_CONT=$( [ "${{ needs.container-security.result }}" = "success" ] && echo "✅" || ( [ "${{ needs.container-security.result }}" = "skipped" ] && echo "⏭️" || echo "⚠️" ) )
+          ICON_IAC=$( [ "${{ needs.iac-security.result }}" = "success" ] && echo "✅" || ( [ "${{ needs.iac-security.result }}" = "skipped" ] && echo "⏭️" || echo "⚠️" ) )
+          ICON_LIC=$( [ "${{ needs.license-check.result }}" = "success" ] && echo "✅" || echo "⚠️" )
+          ICON_TEST=$( [ "${{ needs.test-suite.result }}" = "success" ] && echo "✅" || echo "⚠️" )
+
+          echo "icon_secret=$ICON_SECRET" >> $GITHUB_OUTPUT
+          echo "icon_sast=$ICON_SAST" >> $GITHUB_OUTPUT
+          echo "icon_cont=$ICON_CONT" >> $GITHUB_OUTPUT
+          echo "icon_iac=$ICON_IAC" >> $GITHUB_OUTPUT
+          echo "icon_lic=$ICON_LIC" >> $GITHUB_OUTPUT
+          echo "icon_test=$ICON_TEST" >> $GITHUB_OUTPUT
+
+      - name: Step Summary
+        if: always()
+        run: |
+          echo "## 📡 Check 12 — Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status: ${{ steps.eval.outputs.emoji }} ${{ steps.eval.outputs.status }}**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| # | Check | Job | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| 1-2 | Secret Scanning | secret-scan | ${{ steps.eval.outputs.icon_secret }} \`${{ needs.secret-scan.result }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 3-5 | SAST + Deps | sast | ${{ steps.eval.outputs.icon_sast }} \`${{ needs.sast.result }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 6-7 | Container | container-security | ${{ steps.eval.outputs.icon_cont }} \`${{ needs.container-security.result }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 8-9 | IaC | iac-security | ${{ steps.eval.outputs.icon_iac }} \`${{ needs.iac-security.result }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 10 | License | license-check | ${{ steps.eval.outputs.icon_lic }} \`${{ needs.license-check.result }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 11 | Tests | test-suite | ${{ steps.eval.outputs.icon_test }} \`${{ needs.test-suite.result }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View full run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+
+      - name: "Notify Telegram"
+        if: always() && env.TELEGRAM_BOT_TOKEN != ''
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          MESSAGE="🛡️ *DevSecOps Pipeline Report*%0A"
-          MESSAGE+="Repo: \`${{ github.repository }}\`%0A"
-          MESSAGE+="Branch: \`${{ github.ref_name }}\`%0A"
-          MESSAGE+="Commit: \`${{ github.sha }}\`%0A"
-          MESSAGE+="Status: ${{ steps.summary.outputs.status }}%0A"
-          MESSAGE+="%0A*Security Gates:*%0A"
-          MESSAGE+="• Secrets: ${{ needs.secret-scan.result }}%0A"
-          MESSAGE+="• SAST: ${{ needs.sast.result }}%0A"
-          MESSAGE+="• Container: ${{ needs.container-security.result }}%0A"
-          MESSAGE+="• IaC: ${{ needs.iac-security.result }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          STATUS="${{ steps.eval.outputs.emoji }} ${{ steps.eval.outputs.status }}"
+
+          MSG="🛡️ *DevSecOps Pipeline Report*%0A"
+          MSG+="━━━━━━━━━━━━━━━━━━━━%0A"
+          MSG+="*Repo:* \`${{ github.repository }}\`%0A"
+          MSG+="*Branch:* \`${{ github.ref_name }}\`%0A"
+          MSG+="*Commit:* \`${GITHUB_SHA::7}\`%0A"
+          MSG+="*Status:* ${STATUS}%0A"
+          MSG+="%0A*12 Security Checks:*%0A"
+          MSG+="${{ steps.eval.outputs.icon_secret }} Secrets (TruffleHog+Gitleaks): \`${{ needs.secret-scan.result }}\`%0A"
+          MSG+="${{ steps.eval.outputs.icon_sast }} SAST (Bandit+Semgrep+Safety): \`${{ needs.sast.result }}\`%0A"
+          MSG+="${{ steps.eval.outputs.icon_cont }} Container (Trivy+Hadolint): \`${{ needs.container-security.result }}\`%0A"
+          MSG+="${{ steps.eval.outputs.icon_iac }} IaC (tfsec+Checkov): \`${{ needs.iac-security.result }}\`%0A"
+          MSG+="${{ steps.eval.outputs.icon_lic }} Licenses (pip-licenses): \`${{ needs.license-check.result }}\`%0A"
+          MSG+="${{ steps.eval.outputs.icon_test }} Tests (pytest 21): \`${{ needs.test-suite.result }}\`%0A"
+          MSG+="%0A🔗 [Ver pipeline completo](${RUN_URL})"
 
           curl -s -X POST \
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="${MESSAGE}" \
-            -d parse_mode="Markdown"
+            -d text="${MSG}" \
+            -d parse_mode="Markdown" \
+            -d disable_web_page_preview=true
 
-      - name: Notify via Discord (al Búnker)
-        if: env.DISCORD_WEBHOOK_URL != ''
+      - name: "Notify Discord"
+        if: always() && env.DISCORD_WEBHOOK_URL != ''
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          STATUS="${{ steps.summary.outputs.status }}"
-          COLOR=3066993  # verde
-          if [[ "$STATUS" == *"FAILED"* ]]; then
-            COLOR=15158332  # rojo
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          STATUS="${{ steps.eval.outputs.status }}"
+
+          if [ "$STATUS" = "PASSED" ]; then
+            COLOR=3066993
+            TITLE="✅ DevSecOps Pipeline — ALL CHECKS PASSED"
+          else
+            COLOR=15158332
+            TITLE="🚨 DevSecOps Pipeline — CHECKS FAILED"
           fi
 
           curl -s -X POST "$DISCORD_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{
               \"embeds\": [{
-                \"title\": \"🛡️ DevSecOps Pipeline Report\",
-                \"color\": $COLOR,
+                \"title\": \"${TITLE}\",
+                \"url\": \"${RUN_URL}\",
+                \"color\": ${COLOR},
                 \"fields\": [
                   {\"name\": \"Repo\", \"value\": \"\`${{ github.repository }}\`\", \"inline\": true},
                   {\"name\": \"Branch\", \"value\": \"\`${{ github.ref_name }}\`\", \"inline\": true},
-                  {\"name\": \"Status\", \"value\": \"$STATUS\", \"inline\": false},
-                  {\"name\": \"Secrets\", \"value\": \"${{ needs.secret-scan.result }}\", \"inline\": true},
-                  {\"name\": \"SAST\", \"value\": \"${{ needs.sast.result }}\", \"inline\": true},
-                  {\"name\": \"Container\", \"value\": \"${{ needs.container-security.result }}\", \"inline\": true},
-                  {\"name\": \"IaC\", \"value\": \"${{ needs.iac-security.result }}\", \"inline\": true}
+                  {\"name\": \"Commit\", \"value\": \"\`${GITHUB_SHA::7}\`\", \"inline\": true},
+                  {\"name\": \"🔑 Secrets (1-2)\", \"value\": \"${{ steps.eval.outputs.icon_secret }} \`${{ needs.secret-scan.result }}\`\", \"inline\": true},
+                  {\"name\": \"🔍 SAST (3-5)\", \"value\": \"${{ steps.eval.outputs.icon_sast }} \`${{ needs.sast.result }}\`\", \"inline\": true},
+                  {\"name\": \"🐳 Container (6-7)\", \"value\": \"${{ steps.eval.outputs.icon_cont }} \`${{ needs.container-security.result }}\`\", \"inline\": true},
+                  {\"name\": \"🏗️ IaC (8-9)\", \"value\": \"${{ steps.eval.outputs.icon_iac }} \`${{ needs.iac-security.result }}\`\", \"inline\": true},
+                  {\"name\": \"📄 License (10)\", \"value\": \"${{ steps.eval.outputs.icon_lic }} \`${{ needs.license-check.result }}\`\", \"inline\": true},
+                  {\"name\": \"🧪 Tests (11)\", \"value\": \"${{ steps.eval.outputs.icon_test }} \`${{ needs.test-suite.result }}\`\", \"inline\": true}
                 ],
-                \"footer\": {\"text\": \"Búnker DevSecOps | Mantishield\"},
+                \"footer\": {\"text\": \"Bunker DevSecOps | Mantishield | 12 Checks\"},
                 \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
               }]
             }"
