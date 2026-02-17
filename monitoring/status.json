@@ -1,54 +1,439 @@
 {
   "pipeline": {
-    "status": "passed",
-    "last_run": "2026-02-18T23:45:12Z",
-    "commit": "3378f20",
-    "branch": "main",
-    "duration_seconds": 187,
+    "status": "warning",
+    "last_run": "2026-02-19T14:32:17Z",
+    "duration_seconds": 487,
     "trigger": "push",
-    "stages": {
-      "secret-scan": { "status": "passed", "duration_seconds": 22, "findings": 0 },
-      "sast": { "status": "passed", "duration_seconds": 68, "findings": 6 },
-      "container-security": { "status": "skipped", "duration_seconds": 0, "findings": 0 },
-      "iac-security": { "status": "skipped", "duration_seconds": 0, "findings": 0 },
-      "notify-bunker": { "status": "passed", "duration_seconds": 5, "findings": 0 }
-    }
-  },
-  "vulnerabilities": [
-    { "id": "B602", "title": "Command Injection (shell=True)", "severity": "critical", "file": "vulnerable_app/app.py", "line": 56, "status": "fixed", "cwe": "CWE-78" },
-    { "id": "B201", "title": "Flask debug=True in production", "severity": "high", "file": "vulnerable_app/app.py", "line": 134, "status": "fixed", "cwe": "CWE-94" },
-    { "id": "B105", "title": "Hardcoded secrets (SECRET_KEY, DB password, API key)", "severity": "critical", "file": "vulnerable_app/app.py", "line": 27, "status": "fixed", "cwe": "CWE-798" },
-    { "id": "B608", "title": "SQL Injection via f-string", "severity": "high", "file": "vulnerable_app/app.py", "line": 40, "status": "fixed", "cwe": "CWE-89" },
-    { "id": "B301", "title": "Insecure deserialization (pickle.loads)", "severity": "high", "file": "vulnerable_app/app.py", "line": 70, "status": "fixed", "cwe": "CWE-502" },
-    { "id": "B310", "title": "SSRF via urlopen without validation", "severity": "medium", "file": "vulnerable_app/app.py", "line": 93, "status": "fixed", "cwe": "CWE-918" },
-    { "id": "PATH-01", "title": "Path Traversal (unsanitized file path)", "severity": "high", "file": "vulnerable_app/app.py", "line": 80, "status": "fixed", "cwe": "CWE-22" },
-    { "id": "B104", "title": "Binding to all interfaces (0.0.0.0)", "severity": "medium", "file": "vulnerable_app/app.py", "line": 134, "status": "fixed", "cwe": "CWE-605" },
-    { "id": "DEP-01", "title": "Gunicorn 22.0.0 HTTP smuggling vulnerability", "severity": "medium", "file": "requirements.txt", "line": 1, "status": "open", "cwe": "CVE-72809" }
-  ],
-  "architecture": {
-    "nodes": [
-      { "id": "vpn-hub", "label": "VPN Hub", "type": "server", "ip": "10.10.0.1", "status": "online", "services": ["WireGuard", "Nginx mTLS", "Monitoring"] },
-      { "id": "parrot", "label": "Parrot OS", "type": "workstation", "ip": "10.10.0.2", "status": "online", "services": ["Bandit", "Semgrep", "Claude Code"] },
-      { "id": "agent", "label": "Agent Node", "type": "agent", "ip": "10.10.0.3", "status": "online", "services": ["Docker", "Pipeline Runner", "Trivy"] }
-    ],
-    "connections": [
-      { "from": "parrot", "to": "vpn-hub", "protocol": "WireGuard", "port": 51820 },
-      { "from": "agent", "to": "vpn-hub", "protocol": "WireGuard", "port": 51820 },
-      { "from": "parrot", "to": "agent", "protocol": "mTLS", "port": 443 }
+    "commit": {
+      "hash": "01973ef",
+      "author": "Jawy Romero",
+      "email": "jawy.romero@gmail.com",
+      "branch": "main",
+      "message": "test: rewrite security tests aligned to OWASP Top 10 2021",
+      "timestamp": "2026-02-19T14:30:00Z"
+    },
+    "checks": [
+      {
+        "id": 1,
+        "name": "TruffleHog Secret Scan",
+        "tool": "trufflehog",
+        "owasp": "A07:2021",
+        "cwe": "CWE-798",
+        "status": "warning",
+        "findings": 3,
+        "duration_seconds": 42,
+        "description": "Scan del historial de git buscando secrets verificados"
+      },
+      {
+        "id": 2,
+        "name": "Gitleaks Pattern Scan",
+        "tool": "gitleaks",
+        "owasp": "A07:2021",
+        "cwe": "CWE-798",
+        "status": "warning",
+        "findings": 4,
+        "duration_seconds": 18,
+        "description": "Patterns de API keys y passwords en codigo actual"
+      },
+      {
+        "id": 3,
+        "name": "Bandit SAST",
+        "tool": "bandit",
+        "owasp": "A03:2021",
+        "cwe": "CWE-89",
+        "status": "warning",
+        "findings": 7,
+        "duration_seconds": 35,
+        "description": "Analisis estatico de seguridad para Python"
+      },
+      {
+        "id": 4,
+        "name": "Semgrep SAST",
+        "tool": "semgrep",
+        "owasp": "A03:2021",
+        "cwe": "CWE-78",
+        "status": "warning",
+        "findings": 15,
+        "duration_seconds": 89,
+        "description": "SAST multi-lenguaje con reglas de la comunidad"
+      },
+      {
+        "id": 5,
+        "name": "Safety Dependency Check",
+        "tool": "safety",
+        "owasp": "A06:2021",
+        "cwe": "CWE-1104",
+        "status": "warning",
+        "findings": 1,
+        "duration_seconds": 22,
+        "description": "Auditoria de CVEs en dependencias Python"
+      },
+      {
+        "id": 6,
+        "name": "pip-audit",
+        "tool": "pip-audit",
+        "owasp": "A06:2021",
+        "cwe": "CWE-1104",
+        "status": "passed",
+        "findings": 0,
+        "duration_seconds": 28,
+        "description": "Verificacion cruzada de vulnerabilidades en deps"
+      },
+      {
+        "id": 7,
+        "name": "Trivy Container Scan",
+        "tool": "trivy",
+        "owasp": "A06:2021",
+        "cwe": "CWE-1104",
+        "status": "passed",
+        "findings": 0,
+        "duration_seconds": 67,
+        "description": "Scan de CVEs en imagen Docker"
+      },
+      {
+        "id": 8,
+        "name": "Hadolint Dockerfile Lint",
+        "tool": "hadolint",
+        "owasp": "A05:2021",
+        "cwe": "CWE-16",
+        "status": "passed",
+        "findings": 0,
+        "duration_seconds": 5,
+        "description": "Linting de Dockerfiles contra best practices"
+      },
+      {
+        "id": 9,
+        "name": "tfsec IaC Scan",
+        "tool": "tfsec",
+        "owasp": "A05:2021",
+        "cwe": "CWE-16",
+        "status": "passed",
+        "findings": 0,
+        "duration_seconds": 31,
+        "description": "Scan de misconfigurations en Terraform"
+      },
+      {
+        "id": 10,
+        "name": "Checkov IaC Policy",
+        "tool": "checkov",
+        "owasp": "A05:2021",
+        "cwe": "CWE-16",
+        "status": "warning",
+        "findings": 2,
+        "duration_seconds": 44,
+        "description": "Compliance CIS / NIST en infraestructura"
+      },
+      {
+        "id": 11,
+        "name": "License Audit",
+        "tool": "pip-licenses",
+        "owasp": null,
+        "cwe": null,
+        "status": "passed",
+        "findings": 0,
+        "duration_seconds": 8,
+        "description": "Verificacion de licencias compatibles en dependencias"
+      },
+      {
+        "id": 12,
+        "name": "Security Test Suite",
+        "tool": "pytest",
+        "owasp": "A04:2021",
+        "cwe": null,
+        "status": "passed",
+        "findings": 0,
+        "duration_seconds": 3,
+        "extra": "22/22 tests passed",
+        "description": "Tests automatizados alineados a OWASP Top 10"
+      }
     ]
   },
+  "vulnerabilities": [
+    {
+      "id": "VULN-001",
+      "title": "SQL Injection via f-string",
+      "severity": "critical",
+      "tool": "bandit",
+      "rule": "B608",
+      "owasp": "A03:2021",
+      "cwe": "CWE-89",
+      "file": "vulnerable_app/app.py",
+      "line": 40,
+      "status": "demo",
+      "description": "f-string en query SQL permite inyeccion: f\"SELECT * FROM users WHERE username = '{username}'\""
+    },
+    {
+      "id": "VULN-002",
+      "title": "Command Injection via shell=True",
+      "severity": "critical",
+      "tool": "bandit",
+      "rule": "B602",
+      "owasp": "A03:2021",
+      "cwe": "CWE-78",
+      "file": "vulnerable_app/app.py",
+      "line": 54,
+      "status": "demo",
+      "description": "subprocess.run con shell=True y user input permite ejecucion de comandos arbitrarios"
+    },
+    {
+      "id": "VULN-003",
+      "title": "Hardcoded SECRET_KEY",
+      "severity": "high",
+      "tool": "gitleaks",
+      "rule": "generic-api-key",
+      "owasp": "A07:2021",
+      "cwe": "CWE-798",
+      "file": "vulnerable_app/app.py",
+      "line": 27,
+      "status": "demo",
+      "description": "SECRET_KEY hardcodeado: super_secret_key_12345"
+    },
+    {
+      "id": "VULN-004",
+      "title": "Hardcoded DATABASE_PASSWORD",
+      "severity": "high",
+      "tool": "gitleaks",
+      "rule": "generic-password",
+      "owasp": "A07:2021",
+      "cwe": "CWE-798",
+      "file": "vulnerable_app/app.py",
+      "line": 28,
+      "status": "demo",
+      "description": "Password de base de datos hardcodeado: admin123"
+    },
+    {
+      "id": "VULN-005",
+      "title": "Hardcoded API Key (Fake)",
+      "severity": "high",
+      "tool": "trufflehog",
+      "rule": "anthropic-api-key",
+      "owasp": "A07:2021",
+      "cwe": "CWE-798",
+      "file": "vulnerable_app/app.py",
+      "line": 29,
+      "status": "demo",
+      "description": "API key hardcodeada: sk-ant-api03-FAKE_KEY_FOR_DEMO_ONLY"
+    },
+    {
+      "id": "VULN-006",
+      "title": "Insecure Deserialization (pickle)",
+      "severity": "high",
+      "tool": "bandit",
+      "rule": "B301",
+      "owasp": "A08:2021",
+      "cwe": "CWE-502",
+      "file": "vulnerable_app/app.py",
+      "line": 70,
+      "status": "demo",
+      "description": "pickle.loads de datos no confiables permite Remote Code Execution"
+    },
+    {
+      "id": "VULN-007",
+      "title": "Path Traversal",
+      "severity": "high",
+      "tool": "semgrep",
+      "rule": "python.lang.security.audit.path-traversal",
+      "owasp": "A01:2021",
+      "cwe": "CWE-22",
+      "file": "vulnerable_app/app.py",
+      "line": 80,
+      "status": "demo",
+      "description": "open() sin sanitizacion de ruta permite leer archivos arbitrarios (/etc/passwd)"
+    },
+    {
+      "id": "VULN-008",
+      "title": "SSRF via urlopen",
+      "severity": "medium",
+      "tool": "semgrep",
+      "rule": "python.lang.security.audit.ssrf",
+      "owasp": "A10:2021",
+      "cwe": "CWE-918",
+      "file": "vulnerable_app/app.py",
+      "line": 93,
+      "status": "demo",
+      "description": "urlopen sin validacion de dominio/esquema permite SSRF a servicios internos"
+    },
+    {
+      "id": "VULN-009",
+      "title": "Flask Debug Mode in Production",
+      "severity": "medium",
+      "tool": "bandit",
+      "rule": "B201",
+      "owasp": "A05:2021",
+      "cwe": "CWE-94",
+      "file": "vulnerable_app/app.py",
+      "line": 134,
+      "status": "demo",
+      "description": "debug=True expone debugger interactivo de Werkzeug con ejecucion de codigo"
+    },
+    {
+      "id": "VULN-010",
+      "title": "Bind to 0.0.0.0",
+      "severity": "medium",
+      "tool": "bandit",
+      "rule": "B104",
+      "owasp": "A05:2021",
+      "cwe": "CWE-605",
+      "file": "vulnerable_app/app.py",
+      "line": 134,
+      "status": "demo",
+      "description": "Binding a 0.0.0.0 expone el servicio a todas las interfaces de red"
+    },
+    {
+      "id": "VULN-011",
+      "title": "HTTP Request Smuggling in gunicorn",
+      "severity": "medium",
+      "tool": "safety",
+      "rule": "CVE-2024-1135",
+      "owasp": "A06:2021",
+      "cwe": "CWE-444",
+      "file": "vulnerable_app/requirements.txt",
+      "line": 3,
+      "status": "actionable",
+      "description": "gunicorn 22.0.0 vulnerable a HTTP request smuggling — actualizar a >=22.0.1"
+    },
+    {
+      "id": "VULN-012",
+      "title": "Checkov: S3 bucket sin encryption",
+      "severity": "low",
+      "tool": "checkov",
+      "rule": "CKV_AWS_19",
+      "owasp": "A05:2021",
+      "cwe": "CWE-311",
+      "file": "terraform/main.tf",
+      "line": 45,
+      "status": "info",
+      "description": "S3 bucket para logs no tiene server-side encryption configurado"
+    },
+    {
+      "id": "VULN-013",
+      "title": "Checkov: CloudWatch log retention",
+      "severity": "low",
+      "tool": "checkov",
+      "rule": "CKV_AWS_158",
+      "owasp": "A05:2021",
+      "cwe": "CWE-779",
+      "file": "terraform/main.tf",
+      "line": 62,
+      "status": "info",
+      "description": "CloudWatch log group sin retention policy — logs se acumulan indefinidamente"
+    }
+  ],
+  "severity_summary": {
+    "critical": 2,
+    "high": 5,
+    "medium": 4,
+    "low": 2,
+    "total": 13
+  },
+  "owasp_coverage": {
+    "A01:2021": { "name": "Broken Access Control", "checks": 1, "findings": 1 },
+    "A03:2021": { "name": "Injection", "checks": 2, "findings": 22 },
+    "A04:2021": { "name": "Insecure Design", "checks": 1, "findings": 0 },
+    "A05:2021": { "name": "Security Misconfiguration", "checks": 3, "findings": 4 },
+    "A06:2021": { "name": "Vulnerable Components", "checks": 3, "findings": 1 },
+    "A07:2021": { "name": "Auth Failures", "checks": 2, "findings": 7 },
+    "A08:2021": { "name": "Software Integrity Failures", "checks": 0, "findings": 1 },
+    "A10:2021": { "name": "SSRF", "checks": 0, "findings": 1 }
+  },
+  "tools_summary": {
+    "bandit": { "findings": 7, "severity_breakdown": { "critical": 1, "high": 2, "medium": 3, "low": 1 } },
+    "semgrep": { "findings": 15, "severity_breakdown": { "critical": 5, "high": 4, "medium": 4, "low": 2 } },
+    "trufflehog": { "findings": 3, "severity_breakdown": { "high": 3 } },
+    "gitleaks": { "findings": 4, "severity_breakdown": { "high": 4 } },
+    "safety": { "findings": 1, "severity_breakdown": { "medium": 1 } },
+    "checkov": { "findings": 2, "severity_breakdown": { "low": 2 } }
+  },
   "activity_log": [
-    { "timestamp": "2026-02-18T23:45:12Z", "event": "pipeline_complete", "message": "Pipeline passed on main (3378f20)", "level": "success" },
-    { "timestamp": "2026-02-18T23:44:05Z", "event": "stage_complete", "message": "SAST analysis completed — 6 findings (all previously fixed)", "level": "warning" },
-    { "timestamp": "2026-02-18T23:43:22Z", "event": "stage_skip", "message": "Container security skipped — no Dockerfile detected", "level": "info" },
-    { "timestamp": "2026-02-18T23:43:20Z", "event": "stage_skip", "message": "IaC security skipped — no .tf files detected", "level": "info" },
-    { "timestamp": "2026-02-18T23:42:50Z", "event": "stage_complete", "message": "Secret scanning passed — 0 verified secrets found", "level": "success" },
-    { "timestamp": "2026-02-18T23:42:00Z", "event": "pipeline_start", "message": "Pipeline triggered by push to main", "level": "info" },
-    { "timestamp": "2026-02-18T23:30:00Z", "event": "commit", "message": "feat: add docker-hardening-auditor skill with CIS benchmark", "level": "info" },
-    { "timestamp": "2026-02-18T22:15:00Z", "event": "commit", "message": "feat: add secure version of vulnerable app with all fixes", "level": "info" },
-    { "timestamp": "2026-02-18T21:00:00Z", "event": "scan_complete", "message": "Bandit scan: 9 vulnerabilities found in app.py", "level": "warning" },
-    { "timestamp": "2026-02-18T20:30:00Z", "event": "notification", "message": "Telegram + Discord alerts configured for pipeline", "level": "success" },
-    { "timestamp": "2026-02-17T18:00:00Z", "event": "skill_created", "message": "docker-hardening-auditor skill validated and packaged", "level": "success" },
-    { "timestamp": "2026-02-16T14:00:00Z", "event": "repo_init", "message": "Tribu-Lab repository initialized — Bunker DevSecOps Workshop", "level": "info" }
+    {
+      "timestamp": "2026-02-19T14:32:17Z",
+      "event": "notification",
+      "message": "Reporte final enviado a Telegram y Discord",
+      "level": "success"
+    },
+    {
+      "timestamp": "2026-02-19T14:32:15Z",
+      "event": "pipeline_complete",
+      "message": "Pipeline finalizado en 8m 7s — Status: WARNING (32 findings)",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-02-19T14:31:58Z",
+      "event": "test_complete",
+      "message": "pytest: 22/22 security tests PASSED",
+      "level": "success"
+    },
+    {
+      "timestamp": "2026-02-19T14:31:55Z",
+      "event": "scan_complete",
+      "message": "pip-licenses: 0 licencias incompatibles detectadas",
+      "level": "success"
+    },
+    {
+      "timestamp": "2026-02-19T14:31:30Z",
+      "event": "scan_complete",
+      "message": "Checkov: 2 findings en terraform/main.tf (S3 encryption, log retention)",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-02-19T14:31:02Z",
+      "event": "scan_complete",
+      "message": "tfsec: 0 misconfigurations en Terraform",
+      "level": "success"
+    },
+    {
+      "timestamp": "2026-02-19T14:30:55Z",
+      "event": "scan_complete",
+      "message": "Hadolint: Dockerfiles OK — no issues",
+      "level": "success"
+    },
+    {
+      "timestamp": "2026-02-19T14:30:22Z",
+      "event": "scan_complete",
+      "message": "Trivy: 0 CVEs en imagen Docker (python:3.12-slim)",
+      "level": "success"
+    },
+    {
+      "timestamp": "2026-02-19T14:29:58Z",
+      "event": "scan_complete",
+      "message": "Safety: 1 CVE en gunicorn 22.0.0 (CVE-2024-1135 HTTP smuggling)",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-02-19T14:29:30Z",
+      "event": "scan_complete",
+      "message": "Semgrep: 15 findings (SQLi, CmdInj, Pickle, SSRF, PathTraversal)",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-02-19T14:28:45Z",
+      "event": "scan_complete",
+      "message": "Bandit: 7 issues (1 CRITICAL, 2 HIGH, 3 MEDIUM, 1 LOW)",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-02-19T14:28:10Z",
+      "event": "scan_complete",
+      "message": "Gitleaks: 4 secrets patterns detectados en app.py",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-02-19T14:27:52Z",
+      "event": "alert",
+      "message": "TruffleHog: 3 secrets verificados en historial de git",
+      "level": "error"
+    },
+    {
+      "timestamp": "2026-02-19T14:27:10Z",
+      "event": "scan_start",
+      "message": "Pipeline iniciado — 12 security checks en paralelo",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-02-19T14:27:05Z",
+      "event": "trigger",
+      "message": "Push detectado en main por Jawy Romero (01973ef)",
+      "level": "info"
+    }
   ]
 }
