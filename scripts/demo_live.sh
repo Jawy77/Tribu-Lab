@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  DEMO EN VIVO — Bunker DevSecOps Pipeline
-#  Comunidad Claude Anthropic Colombia
+#  Tribu | Hacklab Bogota | Ethereum Bogota
 # =============================================================================
 #  Uso:
 #    1. Configura tu .env con TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL
@@ -56,7 +56,7 @@ banner() {
     echo "  ║     ░▀▀░░▀▀▀░▀░▀░▀░▀░▀▀▀░▀░▀                               ║"
     echo "  ║                                                              ║"
     echo "  ║          DevSecOps Pipeline — DEMO EN VIVO                   ║"
-    echo "  ║       Comunidad Claude Anthropic Colombia                    ║"
+    echo "  ║       Tribu | Hacklab Bogota | Ethereum Bogota               ║"
     echo "  ║                                                              ║"
     echo "  ╚══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -584,6 +584,6 @@ echo -e "    ${DIM}reports/bandit.json${NC}"
 echo -e "    ${DIM}reports/semgrep.json${NC}"
 echo ""
 echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${CYAN}Bunker DevSecOps — Comunidad Claude Anthropic Colombia${NC}"
+echo -e "  ${CYAN}Bunker DevSecOps — Tribu | Hacklab Bogota | Ethereum Bogota${NC}"
 echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""

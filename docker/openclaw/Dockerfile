@@ -1,6 +1,6 @@
 # =============================================================================
 # 🦞 OpenClaw Bot — Hardened Dockerfile
-# Búnker DevSecOps Workshop — Comunidad Claude Anthropic Colombia
+# Bunker DevSecOps Workshop — Tribu | Hacklab Bogota | Ethereum Bogota
 # =============================================================================
 # Security features:
 #   - Multi-stage build (reduce attack surface)
@@ -32,7 +32,7 @@ FROM python:3.12-slim AS runtime
 # Metadata
 LABEL maintainer="Mantishield <security@mantishield.com>"
 LABEL description="OpenClaw Bot — Hardened for Búnker DevSecOps"
-LABEL workshop="Comunidad Claude Anthropic Colombia"
+LABEL workshop="Tribu | Hacklab Bogota | Ethereum Bogota"
 
 # Crear usuario no-root
 RUN groupadd -r openclaw && \

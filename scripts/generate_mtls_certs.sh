@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # 🔐 Generador de Certificados mTLS — Búnker DevSecOps
-# Comunidad Claude Anthropic Colombia
+# Tribu | Hacklab Bogota | Ethereum Bogota
 # =============================================================================
 # Genera una PKI completa para Mutual TLS:
 #   1. CA Root (Autoridad Certificadora propia)

@@ -1,6 +1,6 @@
 # =============================================================================
 # 🏗️ Terraform — Búnker DevSecOps Infrastructure
-# Comunidad Claude Anthropic Colombia
+# Tribu | Hacklab Bogota | Ethereum Bogota
 # =============================================================================
 # Provisiona la "Trinidad":
 #   - VPC aislada con subredes privadas

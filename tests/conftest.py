@@ -1,6 +1,6 @@
 """
 Fixtures y markers para tests de seguridad alineados a OWASP Top 10 2021.
-Bunker DevSecOps Workshop — Comunidad Claude Anthropic Colombia
+Bunker DevSecOps Workshop — Tribu | Hacklab Bogota | Ethereum Bogota
 """
 
 from pathlib import Path

@@ -1,6 +1,6 @@
 """
 Security Tests — OWASP Top 10 2021 Alignment
-Bunker DevSecOps Workshop — Comunidad Claude Anthropic Colombia
+Bunker DevSecOps Workshop — Tribu | Hacklab Bogota | Ethereum Bogota
 
 22 tests organizados por categoria OWASP.
 Cada test tiene docstring explicando el OWASP ID y por que importa.

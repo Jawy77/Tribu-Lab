@@ -623,4 +623,4 @@ GPG verifica identidad del autor
 
 ---
 
-*Documento generado para el Bunker DevSecOps Workshop — Mantishield / Comunidad Claude Anthropic Colombia*
+*Documento generado para el Bunker DevSecOps Workshop — Mantishield / Tribu | Hacklab Bogota | Ethereum Bogota*

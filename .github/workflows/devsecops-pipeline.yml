@@ -1,6 +1,6 @@
 # =============================================================================
 # DevSecOps Pipeline — Bunker Workshop
-# Comunidad Claude Anthropic Colombia | Mantishield
+# Tribu | Hacklab Bogota | Ethereum Bogota | Mantishield
 # =============================================================================
 #
 # 12 SECURITY CHECKS — OWASP Top 10 2021 Mapping
@@ -37,7 +37,7 @@ name: "🔒 DevSecOps Pipeline — 12 Checks"
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main]
 

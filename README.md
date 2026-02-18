@@ -8,7 +8,7 @@
 
 <h1 align="center">Bunker DevSecOps — 12 Security Checks Automaticos en < 10 min</h1>
 
-<p align="center"><strong>Workshop de Seguridad con AI | Comunidad Claude Anthropic Colombia | Mantishield</strong></p>
+<p align="center"><strong>Workshop de Seguridad con AI | Tribu | Hacklab Bogota | Ethereum Bogota | Mantishield</strong></p>
 
 <p align="center"><code>12 security checks automaticos en cada commit, alineados con OWASP Top 10 2021, completando en menos de 10 minutos. Costo: $0.</code></p>
 
@@ -313,7 +313,7 @@ Tribu-Lab/
 |---|---|
 | **Autor y Facilitador** | Jawy Romero ([@hackwy](https://github.com/Jawy77)) |
 | **Organizacion** | [Mantishield](https://mantishield.com) |
-| **Comunidad** | Claude Anthropic Colombia, Tribu AI Colombia y Latam |
+| **Comunidad** | Tribu, Hacklab Bogota, Ethereum Bogota |
 | **Proyecto OpenClaw** | Bot de seguridad aislado en VPN |
 
 ---

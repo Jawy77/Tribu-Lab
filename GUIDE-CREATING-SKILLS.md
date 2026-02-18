@@ -1,6 +1,6 @@
 # 🎓 Guía: Cómo Crear, Auditar y Publicar Skills para Claude Code
 
-## Taller DevSecOps — Comunidad Claude Anthropic Colombia
+## Taller DevSecOps — Tribu | Hacklab Bogota | Ethereum Bogota
 
 > Esta guía enseña a crear skills profesionales para Claude Code,
 > auditarlos por calidad, y empaquetarlos para el Marketplace de Anthropic.

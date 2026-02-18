@@ -1,6 +1,6 @@
 # =============================================================================
 # 📋 CHEATSHEET — Comandos para la Demo en Vivo
-# Búnker DevSecOps Workshop — Comunidad Claude Anthropic Colombia
+# Bunker DevSecOps Workshop — Tribu | Hacklab Bogota | Ethereum Bogota
 # =============================================================================
 # Tener esta hoja abierta durante el taller para copiar/pegar rápido.
 # =============================================================================
