@@ -291,7 +291,7 @@ jobs:
 
       - name: "Check 9 — Checkov (IaC policy / CIS / NIST)"
         if: steps.detect.outputs.found == 'true'
-        uses: bridgecrewio/checkov-action@v12.2.3
+        uses: bridgecrewio/checkov-action@master
         continue-on-error: true
         with:
           directory: ${{ steps.detect.outputs.dir }}
