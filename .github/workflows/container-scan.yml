@@ -1,0 +1,40 @@
+# =============================================================================
+# 🐳 Container Security Scan — Workflow dedicado
+# Se ejecuta cuando cambian Dockerfiles o docker-compose
+# =============================================================================
+
+name: "🐳 Container Scan"
+
+on:
+  push:
+    paths:
+      - "docker/**"
+      - "docker-compose*.yml"
+  pull_request:
+    paths:
+      - "docker/**"
+
+jobs:
+  scan-openclaw:
+    name: "Scan OpenClaw Container"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build OpenClaw image
+        run: docker build -t openclaw-hardened:test -f docker/openclaw/Dockerfile .
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "openclaw-hardened:test"
+          format: "table"
+          exit-code: "1"
+          severity: "CRITICAL"
+
+      - name: Dockle - Best practices
+        uses: erzz/dockle-action@v1
+        with:
+          image: "openclaw-hardened:test"
+          exit-code: "1"
+          failure-threshold: WARN

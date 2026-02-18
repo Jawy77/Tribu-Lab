@@ -1,0 +1,15 @@
+# =============================================================================
+# 📦 Requirements — Búnker DevSecOps Workshop
+# Security tools + testing
+# =============================================================================
+
+# Security Scanning
+bandit>=1.7.0
+semgrep>=1.50.0
+safety>=3.0.0
+
+# Testing
+pytest>=8.0.0
+
+# Linting
+ruff>=0.4.0
