@@ -345,3 +345,5 @@ codigo vulnerable incluido en este repositorio.
   <sub>12 Checks | OWASP Top 10 | $0 cost | < 10 min | 500+ attendees</sub><br>
   <sub>Hecho con seguridad por <a href="https://github.com/Jawy77">@hackwy</a> para la comunidad</sub>
 </p>
+
+<!-- Pipeline verified: 2026-02-19 22:55 UTC -->
