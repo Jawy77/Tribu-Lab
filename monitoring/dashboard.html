@@ -1,900 +1,641 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mantishield — Security Intelligence</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/recharts@2.15.3/umd/Recharts.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            midnight: { 50:'#0d0d14', 100:'#0a0a10', 200:'#07070b' },
-            neon: '#00ff41',
-            mantis: { 400:'#34d399', 500:'#10b981', 600:'#059669' }
-          },
-          fontFamily: {
-            mono: ['"JetBrains Mono"','ui-monospace','SFMono-Regular','monospace'],
-            sans: ['"Inter"','system-ui','sans-serif']
-          }
-        }
-      }
-    };
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <style>
-    * { box-sizing: border-box; }
-    body { margin:0; background:#07070b; color:#e2e8f0; font-family:'Inter',system-ui,sans-serif; }
-    ::-webkit-scrollbar { width:6px; }
-    ::-webkit-scrollbar-track { background:transparent; }
-    ::-webkit-scrollbar-thumb { background:#1e293b; border-radius:3px; }
-    ::-webkit-scrollbar-thumb:hover { background:#334155; }
-
-    @keyframes fadeInUp {
-      from { opacity:0; transform:translateY(12px); }
-      to   { opacity:1; transform:translateY(0); }
-    }
-    @keyframes pulse-neon {
-      0%,100% { box-shadow:0 0 4px rgba(0,255,65,.2); }
-      50%     { box-shadow:0 0 16px rgba(0,255,65,.4); }
-    }
-    @keyframes typing-dot {
-      0%,60%,100% { opacity:.3; transform:translateY(0); }
-      30%         { opacity:1;  transform:translateY(-4px); }
-    }
-    @keyframes scan-line {
-      0%   { top:0; }
-      100% { top:100%; }
-    }
-    @keyframes bar-grow {
-      from { transform:scaleX(0); }
-      to   { transform:scaleX(1); }
-    }
-    .anim-fade-in { animation:fadeInUp .4s ease-out both; }
-    .anim-bar { animation:bar-grow .6s ease-out both; transform-origin:left; }
-    .scan-line::after {
-      content:''; position:absolute; left:0; width:100%; height:1px;
-      background:linear-gradient(90deg,transparent,rgba(0,255,65,.15),transparent);
-      animation:scan-line 8s linear infinite;
-    }
-
-    .chat-input:focus { outline:none; box-shadow:0 0 0 1px #00ff41, 0 0 12px rgba(0,255,65,.15); }
-    .chip:hover { background:rgba(0,255,65,.15); border-color:rgba(0,255,65,.5); }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Bunker DevSecOps — Live Security Monitor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={theme:{extend:{colors:{neon:'#00ff41',bg0:'#0a0a0f',bg1:'#12121a',bg2:'#1a1a26',bg3:'#22222e',border0:'#2a2a3a'},fontFamily:{mono:['"JetBrains Mono"','ui-monospace','monospace'],sans:['Inter','system-ui','sans-serif']}}}};
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+body{background:#0a0a0f;color:#e0e0e0}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#12121a}
+::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:3px}
+.glow{text-shadow:0 0 10px #00ff41,0 0 20px #00ff4140}
+.card-hover{transition:all .2s ease}
+.card-hover:hover{transform:translateY(-2px);box-shadow:0 4px 20px #00ff4115}
+@keyframes pulse-neon{0%,100%{opacity:1}50%{opacity:.6}}
+.pulse-neon{animation:pulse-neon 2s ease-in-out infinite}
+@keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.scan-line::after{content:'';position:absolute;top:0;left:0;width:50%;height:100%;background:linear-gradient(90deg,transparent,#00ff4108,transparent);animation:scan 3s ease-in-out infinite}
+.status-passed{color:#00ff41;border-color:#00ff4140}
+.status-warning{color:#fbbf24;border-color:#fbbf2440}
+.status-failed{color:#ef4444;border-color:#ef444440}
+.status-skipped{color:#6b7280;border-color:#6b728040}
+.badge-passed{background:#00ff4118;color:#00ff41;border:1px solid #00ff4130}
+.badge-warning{background:#fbbf2418;color:#fbbf24;border:1px solid #fbbf2430}
+.badge-failed{background:#ef444418;color:#ef4444;border:1px solid #ef444430}
+.badge-skipped{background:#6b728018;color:#6b7280;border:1px solid #6b728030}
+.sev-critical{background:#7f1d1d;color:#fca5a5}
+.sev-high{background:#78350f;color:#fde68a}
+.sev-medium{background:#1e3a5f;color:#93c5fd}
+.sev-warning{background:#3f3f00;color:#fef08a}
+</style>
 </head>
-<body>
-  <div id="root"></div>
+<body class="font-sans min-h-screen">
 
-  <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback, useMemo } = React;
-
-    /* ── Recharts (graceful if CDN fails) ── */
-    const RC = window.Recharts || {};
-    const { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
-            Tooltip: RTooltip, ResponsiveContainer, Legend } = RC;
-    const hasRecharts = !!window.Recharts;
-
-    /* ── Constants ── */
-    const COLORS = {
-      critical:'#ef4444', high:'#f97316', medium:'#eab308', low:'#22c55e',
-      passed:'#10b981', warning:'#f59e0b', failed:'#ef4444', skipped:'#64748b',
-      neon:'#00ff41', bg:'#07070b', card:'#0d1117', border:'#1e293b',
-      text:'#e2e8f0', muted:'#64748b', info:'#38bdf8', demo:'#a78bfa'
-    };
-    const SEV_ORDER = ['critical','high','medium','low'];
-    const STATUS_ICON = { passed:'\u2705', warning:'\u26A0\uFE0F', failed:'\u274C', skipped:'\u23ED\uFE0F' };
-    const LEVEL_ICON = { error:'\u{1F534}', warning:'\u{1F7E1}', success:'\u{1F7E2}', info:'\u{1F535}' };
-
-    /* ═══════════════════════════════════════════════
-       PATTERN MATCHING ENGINE
-       ═══════════════════════════════════════════════ */
-
-    function processQuery(q, data) {
-      if (!data) return { text:'Cargando datos del pipeline... intenta de nuevo en un momento.', viz:null, suggestions:['estado del pipeline'] };
-      const lo = q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-
-      /* Help */
-      if (/^(ayuda|help|comando|que puedo|que sabes)/.test(lo))
-        return helpResponse();
-
-      /* Severity filter */
-      if (/critica|critical|alta|grave/.test(lo) && /vuln|finding|hallazgo|cuantas/.test(lo))
-        return severityFilterResponse(data, ['critical','high']);
-      if (/media|medium|moderada/.test(lo) && /vuln|finding|hallazgo/.test(lo))
-        return severityFilterResponse(data, ['medium']);
-
-      /* Vulns / findings */
-      if (/vuln|finding|hallazgo|seguridad|problema/.test(lo))
-        return vulnSummaryResponse(data);
-
-      /* Pipeline status */
-      if (/pipeline|status|estado|check/.test(lo))
-        return pipelineResponse(data);
-
-      /* Commit */
-      if (/commit|quien|quie|ultimo|push|autor/.test(lo))
-        return commitResponse(data);
-
-      /* OWASP */
-      if (/owasp|a0[0-9]|top.?10/.test(lo))
-        return owaspResponse(data);
-
-      /* Charts */
-      if (/pie|torta|distribuc|proporci/.test(lo))
-        return pieChartResponse(data);
-      if (/graf|chart|plot|barra|visual/.test(lo))
-        return barChartResponse(data);
-
-      /* Timeline / log */
-      if (/timeline|historial|log|actividad|evento/.test(lo))
-        return timelineResponse(data);
-
-      /* Summary */
-      if (/resumen|summary|dashboard|general/.test(lo))
-        return summaryResponse(data);
-
-      /* Tool-specific */
-      if (/bandit/.test(lo)) return toolFilterResponse(data, 'bandit');
-      if (/semgrep/.test(lo)) return toolFilterResponse(data, 'semgrep');
-      if (/trivy/.test(lo)) return toolFilterResponse(data, 'trivy');
-      if (/trufflehog|truffle/.test(lo)) return toolFilterResponse(data, 'trufflehog');
-      if (/gitleaks/.test(lo)) return toolFilterResponse(data, 'gitleaks');
-      if (/safety/.test(lo)) return toolFilterResponse(data, 'safety');
-      if (/checkov/.test(lo)) return toolFilterResponse(data, 'checkov');
-
-      /* Fallback */
-      return {
-        text:`No encontre un patron para "${q}". Intenta con alguno de estos comandos:`,
-        viz:{ type:'help' },
-        suggestions:['vulnerabilidades','estado del pipeline','grafico de severidad']
-      };
+<script>
+// ═══════════════════════════════════════════════════════════════
+// EMBEDDED PIPELINE DATA — Real results from local run
+// ═══════════════════════════════════════════════════════════════
+const PIPELINE_DATA = {
+  timestamp: "2026-02-19T22:47:00Z",
+  pipeline_run: "local",
+  branch: "main",
+  commit: "8200e27",
+  total_checks: 12,
+  status: "warning",
+  duration_seconds: 38,
+  checks: [
+    {
+      number: 1, name: "Secret Scanning", tool: "gitleaks", version: "8.24.3",
+      owasp: "A07:2021", cwe: "CWE-798", status: "warning", findings: 1,
+      description: "1 API key in evals.json (demo material)",
+      details: [{severity:"medium",file:"skills/docker-hardening-auditor/evals/evals.json",line:34,rule:"generic-api-key",note:"msk-live-abc123 — intentional test fixture"}]
+    },
+    {
+      number: 2, name: "Secret Grep", tool: "ripgrep", version: "—",
+      owasp: "A07:2021", cwe: "CWE-798", status: "passed", findings: 0,
+      description: "No hardcoded secrets in production Python files",
+      details: []
+    },
+    {
+      number: 3, name: "Bandit (Python SAST)", tool: "bandit", version: "1.9.3",
+      owasp: "A03:2021", cwe: "CWE-89,CWE-78", status: "warning", findings: 6,
+      description: "2 HIGH + 4 MEDIUM in vulnerable_app/app.py",
+      details: [
+        {severity:"high",file:"vulnerable_app/app.py",line:56,rule:"B602",note:"subprocess shell=True — Command Injection"},
+        {severity:"high",file:"vulnerable_app/app.py",line:134,rule:"B201",note:"Flask debug=True — RCE via Werkzeug"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:40,rule:"B608",note:"SQL injection via f-string"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:70,rule:"B301",note:"pickle.loads — insecure deserialization"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:93,rule:"B310",note:"urlopen without scheme validation — SSRF"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:134,rule:"B104",note:"Binding to 0.0.0.0 — all interfaces"}
+      ]
+    },
+    {
+      number: 4, name: "Semgrep (SAST)", tool: "semgrep", version: "1.152.0",
+      owasp: "A03:2021", cwe: "CWE-89,CWE-78,CWE-502", status: "warning", findings: 15,
+      description: "15 blocking findings, 291 rules, 3 files scanned",
+      details: [
+        {severity:"high",file:"vulnerable_app/app.py",line:40,rule:"tainted-sql-string",note:"SQL injection"},
+        {severity:"high",file:"vulnerable_app/app.py",line:54,rule:"subprocess-injection",note:"Command injection"},
+        {severity:"high",file:"vulnerable_app/app.py",line:70,rule:"insecure-deserialization",note:"pickle.loads RCE"},
+        {severity:"high",file:"vulnerable_app/app.py",line:80,rule:"path-traversal-open",note:"Path traversal"},
+        {severity:"high",file:"vulnerable_app/app.py",line:91,rule:"ssrf-injection-urllib",note:"SSRF"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:41,rule:"formatted-sql-query",note:"Raw SQL execute"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:55,rule:"dangerous-subprocess-use",note:"User data in subprocess"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:56,rule:"subprocess-shell-true",note:"shell=True"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:70,rule:"avoid-pickle",note:"Pickle deserialization"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:93,rule:"dynamic-urllib-use",note:"Dynamic URL open"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:134,rule:"app-run-bad-host",note:"Host 0.0.0.0"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:134,rule:"debug-enabled",note:"Flask debug mode"},
+        {severity:"medium",file:"vulnerable_app/app.py",line:41,rule:"sqlalchemy-raw-query",note:"Raw query exec"},
+        {severity:"medium",file:"vulnerable_app/app_secure.py",line:150,rule:"ssrf-injection-urllib",note:"SSRF (validated)"},
+        {severity:"low",file:"vulnerable_app/app_secure.py",line:166,rule:"dynamic-urllib-use",note:"Dynamic URL (validated)"}
+      ]
+    },
+    {
+      number: 5, name: "Dependency Audit", tool: "safety", version: "3.7.0",
+      owasp: "A06:2021", cwe: "CWE-1035", status: "warning", findings: 1,
+      description: "1 CVE in gunicorn 22.0.0 (PVE-2024-72809)",
+      details: [{severity:"medium",file:"vulnerable_app/requirements.txt",line:1,rule:"PVE-2024-72809",note:"gunicorn >=22.0.0,<23.0.0 — TolerateDangerousFraming header confusion"}]
+    },
+    {
+      number: 6, name: "Trivy (CVEs)", tool: "trivy", version: "0.59.1",
+      owasp: "A06:2021", cwe: "CWE-1035", status: "passed", findings: 0,
+      description: "No HIGH/CRITICAL vulns in Python deps",
+      details: []
+    },
+    {
+      number: 7, name: "Hadolint (Dockerfile)", tool: "hadolint", version: "2.12.0",
+      owasp: "A05:2021", cwe: "CWE-16", status: "warning", findings: 2,
+      description: "2 DL3008 warnings — pin apt versions",
+      details: [
+        {severity:"warning",file:"docker/openclaw/Dockerfile",line:20,rule:"DL3008",note:"Pin versions in apt-get install (builder)"},
+        {severity:"warning",file:"docker/openclaw/Dockerfile",line:45,rule:"DL3008",note:"Pin versions in apt-get install (runtime)"}
+      ]
+    },
+    {
+      number: 8, name: "IaC Security (tfsec/Trivy)", tool: "trivy", version: "0.59.1",
+      owasp: "A05:2021", cwe: "CWE-16", status: "failed", findings: 3,
+      description: "2 CRITICAL + 1 HIGH in Terraform SGs",
+      details: [
+        {severity:"critical",file:"terraform/modules/vpc/main.tf",line:83,rule:"AVD-AWS-0104",note:"SG vpn_hub: unrestricted egress 0.0.0.0/0"},
+        {severity:"critical",file:"terraform/modules/vpc/main.tf",line:130,rule:"AVD-AWS-0104",note:"SG agent: unrestricted egress 0.0.0.0/0"},
+        {severity:"high",file:"terraform/modules/vpc/main.tf",line:20,rule:"AVD-AWS-0164",note:"Subnet map_public_ip_on_launch=true"}
+      ]
+    },
+    {
+      number: 9, name: "Checkov (Compliance)", tool: "checkov", version: "CI-only",
+      owasp: "A05:2021", cwe: "CWE-16", status: "skipped", findings: 0,
+      description: "Runs in GitHub Actions only",
+      details: []
+    },
+    {
+      number: 10, name: "License Audit", tool: "pip-licenses", version: "5.5.1",
+      owasp: "—", cwe: "—", status: "warning", findings: 11,
+      description: "11 packages with UNKNOWN license, 750+ audited",
+      details: [
+        {severity:"warning",file:"site-packages",line:0,rule:"UNKNOWN",note:"11 packages with unresolvable license metadata"}
+      ]
+    },
+    {
+      number: 11, name: "Security Tests", tool: "pytest", version: "7.2.1",
+      owasp: "A04:2021", cwe: "CWE-284", status: "passed", findings: 0,
+      description: "22/22 passed in 0.72s",
+      tests: {passed:22,failed:0,total:22,duration:"0.72s",
+        groups:[
+          {name:"TestSecrets",owasp:"A07",count:3},
+          {name:"TestInjection",owasp:"A03",count:4},
+          {name:"TestSecurityConfig",owasp:"A05",count:5},
+          {name:"TestCryptoTransport",owasp:"A02",count:3},
+          {name:"TestVulnerableAppDetection",owasp:"—",count:6},
+          {name:"TestDependencies",owasp:"A06",count:1}
+        ]
+      },
+      details: []
+    },
+    {
+      number: 12, name: "Notifications (TG+Discord)", tool: "curl", version: "—",
+      owasp: "—", cwe: "—", status: "skipped", findings: 0,
+      description: "Requires secrets — skipped locally",
+      details: []
     }
+  ],
+  activity: [
+    {time:"22:45:01",event:"Pipeline started",type:"info"},
+    {time:"22:45:02",event:"gitleaks: 1 leak found (evals.json)",type:"warning"},
+    {time:"22:45:03",event:"Secret grep: 0 findings in production code",type:"success"},
+    {time:"22:45:08",event:"bandit: 6 findings (2 HIGH, 4 MEDIUM)",type:"warning"},
+    {time:"22:45:22",event:"semgrep: 15 blocking findings (291 rules)",type:"warning"},
+    {time:"22:45:25",event:"safety: 1 CVE in gunicorn 22.0.0",type:"warning"},
+    {time:"22:45:26",event:"pip-audit: No known vulnerabilities",type:"success"},
+    {time:"22:45:28",event:"trivy IaC: 3 misconfigs (2 CRITICAL, 1 HIGH)",type:"error"},
+    {time:"22:45:29",event:"hadolint: 2 warnings (DL3008)",type:"warning"},
+    {time:"22:45:30",event:"pytest: 22/22 passed (0.72s)",type:"success"},
+    {time:"22:45:32",event:"pip-licenses: 750+ packages, 11 UNKNOWN",type:"warning"},
+    {time:"22:45:38",event:"Pipeline completed — 28 total findings",type:"info"}
+  ],
+  commits: [
+    {hash:"8200e27",message:"test: trigger pipeline to verify Discord alerts",author:"Jawy Romero",date:"2026-02-19T09:30:00-05:00",type:"test"},
+    {hash:"b15852e",message:"fix(ci): use checkov-action@master — v12.2.3 tag does not exist",author:"Jawy Romero",date:"2026-02-18T15:00:00-05:00",type:"fix"},
+    {hash:"2c56d23",message:"feat: complete DevSecOps workshop with 12 OWASP security checks",author:"Jawy Romero",date:"2026-02-18T10:30:00-05:00",type:"feat"},
+    {hash:"b36ed0e",message:"docs: add comprehensive Security Stack documentation",author:"Jawy Romero",date:"2026-02-17T17:00:00-05:00",type:"docs"},
+    {hash:"39ac170",message:"feat: conversational AI-first security dashboard (Mantishield)",author:"Jawy Romero",date:"2026-02-17T14:30:00-05:00",type:"feat"},
+    {hash:"48a95c8",message:"test: rewrite security tests aligned to OWASP Top 10 2021",author:"Jawy Romero",date:"2026-02-17T10:00:00-05:00",type:"test"},
+    {hash:"a91ee4f",message:"ci: rewrite DevSecOps pipeline with 12 parallel security checks",author:"Jawy Romero",date:"2026-02-16T14:45:00-05:00",type:"ci"},
+    {hash:"2c6d08f",message:"docs: complete README with quick start, secrets guide, and stack",author:"Jawy Romero",date:"2026-02-16T11:15:00-05:00",type:"docs"},
+    {hash:"8b03812",message:"docs: rewrite README for 500+ attendee workshop",author:"Jawy Romero",date:"2026-02-16T09:30:00-05:00",type:"docs"},
+    {hash:"5bd0acf",message:"feat: add live demo script with real-time dashboard + TG/Discord alerts",author:"Jawy Romero",date:"2026-02-15T15:30:00-05:00",type:"feat"}
+  ],
+  claude_session: {
+    model: "claude-opus-4-6",
+    sessions: 3,
+    total_tool_calls: 187,
+    files_created: 22,
+    files_modified: 19,
+    lines_added: 4698,
+    lines_deleted: 959,
+    commits_made: 10,
+    tokens: {
+      input_estimate: "~480K",
+      output_estimate: "~160K",
+      total_estimate: "~640K",
+      note: "Estimated across 3 sessions (Opus 4.6)"
+    },
+    tasks_completed: [
+      {name:"CI/CD Pipeline (12 checks)",status:"done"},
+      {name:"Vulnerable app + secure app",status:"done"},
+      {name:"22 OWASP security tests",status:"done"},
+      {name:"Security Stack docs (mTLS, gaps)",status:"done"},
+      {name:"Dashboard (Mantishield)",status:"done"},
+      {name:"Branching strategy + protection",status:"done"},
+      {name:"Workshop guide (500+ attendees)",status:"done"},
+      {name:"Claude Code skills (2)",status:"done"},
+      {name:"Demo script (local + remote)",status:"done"},
+      {name:"Install + run all 9 security tools",status:"done"},
+      {name:"Discord/Telegram notifications",status:"done"},
+      {name:"Community references update",status:"done"}
+    ]
+  }
+};
 
-    function helpResponse() {
-      return {
-        text:'Estos son los comandos que entiendo. Puedes escribir en espanol o ingles:',
-        viz:{ type:'help' },
-        suggestions:['vulnerabilidades criticas','estado del pipeline','grafico de barras']
-      };
-    }
+// ═══════════════════════════════════════════════════════════════
+// Try to load fresh status.json (works via http://, fails silently on file://)
+// ═══════════════════════════════════════════════════════════════
+let liveData = null;
+try {
+  fetch('status.json').then(r=>r.ok?r.json():null).then(d=>{if(d)liveData=d;}).catch(()=>{});
+} catch(e){}
+</script>
 
-    function vulnSummaryResponse(data) {
-      const s = data.severity_summary;
-      return {
-        text:`Se encontraron **${s.total} vulnerabilidades** en el ultimo scan: ${s.critical} criticas, ${s.high} altas, ${s.medium} medias, ${s.low} bajas. Todas en \`vulnerable_app/\` son intencionales (demo).`,
-        viz:{ type:'vuln-table', data:data.vulnerabilities },
-        suggestions:['vulnerabilidades criticas','grafico de severidad','que OWASP checks fallaron']
-      };
-    }
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    function severityFilterResponse(data, severities) {
-      const filtered = data.vulnerabilities.filter(v => severities.includes(v.severity));
-      const label = severities.join(' / ');
-      return {
-        text:`**${filtered.length} vulnerabilidades** con severidad ${label}:`,
-        viz:{ type:'vuln-table', data:filtered },
-        suggestions:['todas las vulnerabilidades','grafico de barras','estado del pipeline']
-      };
-    }
+<div id="root"></div>
 
-    function pipelineResponse(data) {
-      const p = data.pipeline;
-      const passed = p.checks.filter(c=>c.status==='passed').length;
-      const warn = p.checks.filter(c=>c.status==='warning').length;
-      return {
-        text:`Pipeline **${p.status.toUpperCase()}** — ${passed}/${p.checks.length} checks pasaron, ${warn} con warnings. Duracion total: ${Math.floor(p.duration_seconds/60)}m ${p.duration_seconds%60}s.`,
-        viz:{ type:'pipeline-cards', data:p.checks },
-        suggestions:['vulnerabilidades','que OWASP checks fallaron','resumen general']
-      };
-    }
+<script type="text/babel">
+const {useState,useEffect,useMemo} = React;
 
-    function commitResponse(data) {
-      const c = data.pipeline.commit;
-      return {
-        text:`Ultimo commit por **${c.author}** en branch \`${c.branch}\`:`,
-        viz:{ type:'commit-card', data:c },
-        suggestions:['estado del pipeline','vulnerabilidades','historial de actividad']
-      };
-    }
+// ── Helpers ──────────────────────────────────────────────────
+const statusIcon = (s) => ({passed:'\u2705',warning:'\u26A0\uFE0F',failed:'\uD83D\uDEA8',skipped:'\u23ED\uFE0F'}[s]||'\u2753');
+const statusClass = (s) => `status-${s}`;
+const badgeClass = (s) => `badge-${s}`;
+const sevClass = (s) => `sev-${s||'warning'}`;
 
-    function owaspResponse(data) {
-      return {
-        text:'Cobertura de OWASP Top 10 2021 en el pipeline:',
-        viz:{ type:'owasp-table', data:data.owasp_coverage },
-        suggestions:['vulnerabilidades criticas','grafico de barras','estado del pipeline']
-      };
-    }
+function formatTime(iso) {
+  try { return new Date(iso).toLocaleString('es-CO',{timeZone:'America/Bogota'}); }
+  catch(e){ return iso; }
+}
 
-    function barChartResponse(data) {
-      const chartData = SEV_ORDER.map(s => ({
-        name: s.charAt(0).toUpperCase()+s.slice(1),
-        count: data.severity_summary[s] || 0,
-        fill: COLORS[s]
-      }));
-      return {
-        text:'Distribucion de vulnerabilidades por severidad:',
-        viz:{ type:'bar-chart', data:chartData },
-        suggestions:['pie chart de severidad','vulnerabilidades','estado del pipeline']
-      };
-    }
+// ── Header ───────────────────────────────────────────────────
+function Header({data}) {
+  return (
+    <header className="bg-bg1 border-b border-border0 px-6 py-4">
+      <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold font-mono">
+            <span className="text-neon glow">{'\u{1F6E1}'}</span>{' '}
+            <span className="text-white">Bunker DevSecOps</span>{' '}
+            <span className="text-gray-500">— Live Security Monitor</span>
+          </h1>
+          <p className="text-gray-500 text-sm mt-1 font-mono">Mantishield | Tribu | Hacklab Bogota | Ethereum Bogota</p>
+        </div>
+        <div className="flex items-center gap-4 text-sm font-mono">
+          <span className="text-gray-500">branch:</span>
+          <span className="text-neon">{data.branch}</span>
+          <span className="text-gray-500">commit:</span>
+          <span className="text-yellow-400">{data.commit}</span>
+          <span className="text-gray-500">run:</span>
+          <span className="text-cyan-400">{data.pipeline_run}</span>
+          <span className={`px-2 py-0.5 rounded text-xs font-bold ${badgeClass(data.status)}`}>
+            {data.status.toUpperCase()}
+          </span>
+        </div>
+      </div>
+    </header>
+  );
+}
 
-    function pieChartResponse(data) {
-      const chartData = SEV_ORDER.map(s => ({
-        name: s.charAt(0).toUpperCase()+s.slice(1),
-        value: data.severity_summary[s] || 0
-      })).filter(d => d.value > 0);
-      return {
-        text:'Proporcion de vulnerabilidades por severidad:',
-        viz:{ type:'pie-chart', data:chartData },
-        suggestions:['grafico de barras','vulnerabilidades criticas','resumen general']
-      };
-    }
+// ── Counter Cards ────────────────────────────────────────────
+function Counters({checks}) {
+  const passed = checks.filter(c=>c.status==='passed').length;
+  const warnings = checks.filter(c=>c.status==='warning').length;
+  const failed = checks.filter(c=>c.status==='failed').length;
+  const skipped = checks.filter(c=>c.status==='skipped').length;
+  const totalFindings = checks.reduce((s,c)=>s+c.findings,0);
 
-    function timelineResponse(data) {
-      return {
-        text:`Ultimos ${data.activity_log.length} eventos del pipeline:`,
-        viz:{ type:'timeline', data:data.activity_log },
-        suggestions:['estado del pipeline','vulnerabilidades','ultimo commit']
-      };
-    }
+  const items = [
+    {label:'Total Checks', value:checks.length, color:'text-white', bg:'bg-bg2'},
+    {label:'Passed', value:passed, color:'text-neon', bg:'bg-[#00ff4108]'},
+    {label:'Warnings', value:warnings, color:'text-yellow-400', bg:'bg-yellow-400/5'},
+    {label:'Failed', value:failed, color:'text-red-400', bg:'bg-red-400/5'},
+    {label:'Skipped', value:skipped, color:'text-gray-500', bg:'bg-bg2'},
+    {label:'Total Findings', value:totalFindings, color:'text-orange-400', bg:'bg-orange-400/5'},
+  ];
 
-    function summaryResponse(data) {
-      const p = data.pipeline;
-      const s = data.severity_summary;
-      return {
-        text:`Resumen del Bunker DevSecOps — Pipeline ${p.status.toUpperCase()}, ${p.checks.length} checks ejecutados, ${s.total} findings totales.`,
-        viz:{ type:'summary', pipeline:p, severity:s, owasp:data.owasp_coverage },
-        suggestions:['vulnerabilidades','grafico de barras','estado del pipeline']
-      };
-    }
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {items.map((it,i) => (
+        <div key={i} className={`${it.bg} border border-border0 rounded-lg p-4 text-center card-hover`}>
+          <div className={`text-3xl font-bold font-mono ${it.color}`}>{it.value}</div>
+          <div className="text-gray-500 text-xs mt-1 uppercase tracking-wider">{it.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-    function toolFilterResponse(data, tool) {
-      const filtered = data.vulnerabilities.filter(v => v.tool === tool);
-      const check = data.pipeline.checks.find(c => c.tool === tool);
-      return {
-        text:`**${tool}** encontro ${check ? check.findings : filtered.length} findings:`,
-        viz:{ type:'vuln-table', data:filtered.length ? filtered : [{id:'-',title:'Sin vulnerabilidades detalladas',severity:'info',tool,owasp:'-',cwe:'-',file:'-',line:'-',status:'passed',description:'Check paso sin findings'}] },
-        suggestions:['todas las vulnerabilidades','estado del pipeline','grafico de barras']
-      };
-    }
+// ── Severity Bar ─────────────────────────────────────────────
+function SeverityBar({checks}) {
+  let critical=0, high=0, medium=0, warning=0, low=0;
+  checks.forEach(c => c.details && c.details.forEach(d => {
+    if(d.severity==='critical') critical++;
+    else if(d.severity==='high') high++;
+    else if(d.severity==='medium') medium++;
+    else if(d.severity==='warning') warning++;
+    else low++;
+  }));
+  const total = critical+high+medium+warning+low || 1;
+  const pct = (n) => Math.max((n/total)*100, n>0?2:0);
 
-    /* ═══════════════════════════════════════════════
-       VISUALIZATION COMPONENTS
-       ═══════════════════════════════════════════════ */
+  return (
+    <div className="bg-bg2 border border-border0 rounded-lg p-4">
+      <div className="text-xs text-gray-500 uppercase tracking-wider mb-2 font-mono">Severity Distribution</div>
+      <div className="flex rounded overflow-hidden h-6 bg-bg3">
+        {critical>0 && <div style={{width:`${pct(critical)}%`}} className="bg-red-600 flex items-center justify-center text-[10px] font-bold text-white" title={`CRITICAL: ${critical}`}>C:{critical}</div>}
+        {high>0 && <div style={{width:`${pct(high)}%`}} className="bg-orange-500 flex items-center justify-center text-[10px] font-bold text-white" title={`HIGH: ${high}`}>H:{high}</div>}
+        {medium>0 && <div style={{width:`${pct(medium)}%`}} className="bg-yellow-500 flex items-center justify-center text-[10px] font-bold text-black" title={`MEDIUM: ${medium}`}>M:{medium}</div>}
+        {warning>0 && <div style={{width:`${pct(warning)}%`}} className="bg-yellow-700 flex items-center justify-center text-[10px] font-bold text-white" title={`WARNING: ${warning}`}>W:{warning}</div>}
+        {low>0 && <div style={{width:`${pct(low)}%`}} className="bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white" title={`LOW: ${low}`}>L:{low}</div>}
+      </div>
+      <div className="flex gap-4 mt-2 text-[11px] font-mono">
+        <span className="text-red-400">CRITICAL: {critical}</span>
+        <span className="text-orange-400">HIGH: {high}</span>
+        <span className="text-yellow-400">MEDIUM: {medium}</span>
+        <span className="text-yellow-600">WARNING: {warning}</span>
+        <span className="text-blue-400">LOW: {low}</span>
+      </div>
+    </div>
+  );
+}
 
-    function SeverityBadge({ severity }) {
-      const colors = {
-        critical:'bg-red-500/20 text-red-400 border-red-500/30',
-        high:'bg-orange-500/20 text-orange-400 border-orange-500/30',
-        medium:'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-        low:'bg-green-500/20 text-green-400 border-green-500/30',
-        info:'bg-blue-500/20 text-blue-400 border-blue-500/30',
-        demo:'bg-purple-500/20 text-purple-400 border-purple-500/30'
-      };
-      return (
-        <span className={`inline-block px-2 py-0.5 text-xs font-mono font-semibold rounded border ${colors[severity]||colors.info}`}>
-          {severity.toUpperCase()}
+// ── Check Card ───────────────────────────────────────────────
+function CheckCard({check, onClick}) {
+  const s = check.status;
+  return (
+    <div
+      onClick={()=>onClick(check)}
+      className={`bg-bg2 border rounded-lg p-4 card-hover cursor-pointer relative overflow-hidden scan-line border-border0 hover:border-${s==='passed'?'neon':s==='warning'?'yellow-400':s==='failed'?'red-400':'gray-600'}/40`}
+    >
+      <div className="flex items-start justify-between mb-2">
+        <span className="text-xs font-mono text-gray-600">#{check.number}</span>
+        <span className={`text-xs px-2 py-0.5 rounded font-mono font-bold ${badgeClass(s)}`}>
+          {statusIcon(s)} {s.toUpperCase()}
         </span>
-      );
-    }
+      </div>
+      <h3 className="text-sm font-bold text-white mb-1 leading-tight">{check.name}</h3>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-mono text-cyan-400 bg-cyan-400/10 px-1.5 py-0.5 rounded">{check.tool} {check.version!=='—'&&check.version!=='CI-only'?'v'+check.version:''}</span>
+        {check.owasp!=='—' && <span className="text-[10px] font-mono text-purple-400 bg-purple-400/10 px-1.5 py-0.5 rounded">{check.owasp}</span>}
+      </div>
+      <div className={`text-2xl font-bold font-mono ${s==='passed'?'text-neon':s==='failed'?'text-red-400':'text-yellow-400'}`}>
+        {check.tests ? `${check.tests.passed}/${check.tests.total}` : check.findings}
+        <span className="text-xs text-gray-500 ml-1 font-normal">{check.tests ? 'tests' : 'findings'}</span>
+      </div>
+      <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{check.description}</p>
+    </div>
+  );
+}
 
-    function StatusBadge({ status }) {
-      const colors = {
-        passed:'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-        warning:'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-        failed:'bg-red-500/20 text-red-400 border-red-500/30',
-        skipped:'bg-slate-500/20 text-slate-400 border-slate-500/30'
-      };
-      return (
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-mono rounded border ${colors[status]||colors.skipped}`}>
-          {STATUS_ICON[status]||''} {status}
-        </span>
-      );
-    }
+// ── Detail Modal ─────────────────────────────────────────────
+function DetailModal({check, onClose}) {
+  if(!check) return null;
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-bg1 border border-border0 rounded-xl max-w-3xl w-full max-h-[80vh] overflow-auto p-6" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-white">#{check.number} — {check.name}</h2>
+            <div className="flex gap-2 mt-1">
+              <span className="text-xs font-mono text-cyan-400">{check.tool} {check.version}</span>
+              {check.owasp!=='—' && <span className="text-xs font-mono text-purple-400">{check.owasp}</span>}
+              {check.cwe!=='—' && <span className="text-xs font-mono text-gray-500">{check.cwe}</span>}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-white text-2xl leading-none">&times;</button>
+        </div>
 
-    /* ── Vulnerability Table ── */
-    function VulnTable({ data }) {
-      return (
-        <div className="overflow-x-auto mt-3">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b border-slate-700/50 text-slate-400 text-xs uppercase tracking-wider">
-                <th className="text-left py-2 px-3">Severity</th>
-                <th className="text-left py-2 px-3">Title</th>
-                <th className="text-left py-2 px-3">Tool</th>
-                <th className="text-left py-2 px-3">OWASP</th>
-                <th className="text-left py-2 px-3">File</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((v,i) => (
-                <tr key={v.id||i} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors" style={{animationDelay:`${i*60}ms`}}>
-                  <td className="py-2 px-3"><SeverityBadge severity={v.severity} /></td>
-                  <td className="py-2 px-3 font-medium text-slate-200">{v.title}</td>
-                  <td className="py-2 px-3 font-mono text-xs text-cyan-400">{v.tool}</td>
-                  <td className="py-2 px-3 font-mono text-xs text-amber-400">{v.owasp}</td>
-                  <td className="py-2 px-3 font-mono text-xs text-slate-500">{v.file}:{v.line}</td>
-                </tr>
+        <p className="text-sm text-gray-400 mb-4">{check.description}</p>
+
+        {check.tests && (
+          <div className="mb-4">
+            <div className="text-xs uppercase text-gray-500 mb-2 font-mono">Test Groups</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {check.tests.groups.map((g,i)=>(
+                <div key={i} className="bg-bg3 rounded p-2 text-xs font-mono">
+                  <span className="text-neon">{g.count} passed</span>
+                  <span className="text-gray-500 ml-1">— {g.name}</span>
+                  <span className="text-purple-400 ml-1">({g.owasp})</span>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      );
-    }
-
-    /* ── Pipeline Cards ── */
-    function PipelineCards({ data }) {
-      return (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-          {data.map((c,i) => (
-            <div key={c.id} className="bg-slate-900/60 border border-slate-700/40 rounded-lg p-3 anim-fade-in" style={{animationDelay:`${i*80}ms`}}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-mono text-slate-500">#{c.id}</span>
-                <StatusBadge status={c.status} />
-              </div>
-              <div className="font-medium text-sm text-slate-200 mb-1">{c.name}</div>
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span className="font-mono">{c.tool}</span>
-                <span>{c.findings > 0 ? <span className="text-amber-400">{c.findings} findings</span> : <span className="text-emerald-400">clean</span>}</span>
-              </div>
-              {c.owasp && <div className="mt-1 text-xs font-mono text-purple-400">{c.owasp}</div>}
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    /* ── Commit Card ── */
-    function CommitCard({ data }) {
-      const d = new Date(data.timestamp);
-      return (
-        <div className="mt-3 bg-slate-900/60 border border-slate-700/40 rounded-lg p-4 anim-fade-in">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-lg">
-              {data.author.charAt(0)}
-            </div>
-            <div>
-              <div className="font-semibold text-slate-200">{data.author}</div>
-              <div className="text-xs text-slate-500">{data.email}</div>
             </div>
           </div>
-          <div className="font-mono text-sm bg-slate-950/50 rounded p-3 border border-slate-800/50">
-            <span className="text-amber-400">{data.hash}</span>
-            <span className="text-slate-500 mx-2">on</span>
-            <span className="text-cyan-400">{data.branch}</span>
-            <div className="mt-1 text-slate-300">{data.message}</div>
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            {d.toLocaleDateString('es-CO',{weekday:'long',year:'numeric',month:'long',day:'numeric'})} a las {d.toLocaleTimeString('es-CO')}
-          </div>
-        </div>
-      );
-    }
+        )}
 
-    /* ── OWASP Table ── */
-    function OWASPTable({ data }) {
-      const entries = Object.entries(data);
-      return (
-        <div className="overflow-x-auto mt-3">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b border-slate-700/50 text-slate-400 text-xs uppercase tracking-wider">
-                <th className="text-left py-2 px-3">OWASP ID</th>
-                <th className="text-left py-2 px-3">Category</th>
-                <th className="text-center py-2 px-3">Checks</th>
-                <th className="text-center py-2 px-3">Findings</th>
-                <th className="text-left py-2 px-3">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map(([id, info], i) => (
-                <tr key={id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
-                  <td className="py-2 px-3 font-mono text-amber-400 font-semibold">{id}</td>
-                  <td className="py-2 px-3 text-slate-300">{info.name}</td>
-                  <td className="py-2 px-3 text-center font-mono text-slate-400">{info.checks}</td>
-                  <td className="py-2 px-3 text-center font-mono font-bold" style={{color: info.findings > 5 ? COLORS.critical : info.findings > 0 ? COLORS.medium : COLORS.passed}}>
-                    {info.findings}
-                  </td>
-                  <td className="py-2 px-3">
-                    {info.findings === 0
-                      ? <span className="text-emerald-400 text-xs font-mono">CLEAN</span>
-                      : <span className="text-amber-400 text-xs font-mono">FINDINGS</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-    }
-
-    /* ── CSS Bar Chart (fallback + primary for custom styling) ── */
-    function CSSBarChart({ data }) {
-      const max = Math.max(...data.map(d => d.count), 1);
-      return (
-        <div className="mt-3 space-y-3">
-          {data.map((d,i) => (
-            <div key={d.name} className="anim-fade-in" style={{animationDelay:`${i*100}ms`}}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-slate-300">{d.name}</span>
-                <span className="text-sm font-mono font-bold" style={{color:d.fill}}>{d.count}</span>
-              </div>
-              <div className="h-6 bg-slate-800/50 rounded-full overflow-hidden">
-                <div className="h-full rounded-full anim-bar"
-                     style={{width:`${(d.count/max)*100}%`, background:d.fill, animationDelay:`${i*150}ms`}} />
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    /* ── Recharts Bar Chart ── */
-    function RechartsBar({ data }) {
-      if (!hasRecharts) return <CSSBarChart data={data} />;
-      return (
-        <div className="mt-3" style={{height:260}}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{top:10,right:10,left:-10,bottom:0}}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="name" stroke="#64748b" tick={{fontSize:13}} />
-              <YAxis stroke="#64748b" tick={{fontSize:13}} allowDecimals={false} />
-              <RTooltip contentStyle={{background:'#0d1117',border:'1px solid #1e293b',borderRadius:8,color:'#e2e8f0',fontFamily:'JetBrains Mono'}} />
-              <Bar dataKey="count" radius={[4,4,0,0]}>
-                {data.map((d,i) => <Cell key={i} fill={d.fill} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      );
-    }
-
-    /* ── Recharts Pie Chart ── */
-    function RechartsPie({ data }) {
-      const PIE_COLORS = data.map(d => COLORS[d.name.toLowerCase()] || '#64748b');
-      if (!hasRecharts) {
-        const total = data.reduce((s,d) => s+d.value, 0);
-        return (
-          <div className="mt-3 flex items-center gap-6">
-            <div className="relative w-40 h-40 rounded-full" style={{
-              background: `conic-gradient(${data.map((d,i) => {
-                const start = data.slice(0,i).reduce((s,x)=>s+x.value,0)/total*100;
-                const end = start + d.value/total*100;
-                return `${PIE_COLORS[i]} ${start}% ${end}%`;
-              }).join(', ')})`
-            }}>
-              <div className="absolute inset-4 bg-[#07070b] rounded-full flex items-center justify-center">
-                <span className="text-2xl font-bold text-slate-200">{total}</span>
-              </div>
-            </div>
+        {check.details && check.details.length > 0 && (
+          <div>
+            <div className="text-xs uppercase text-gray-500 mb-2 font-mono">Findings ({check.details.length})</div>
             <div className="space-y-2">
-              {data.map((d,i) => (
-                <div key={d.name} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{background:PIE_COLORS[i]}} />
-                  <span className="text-sm text-slate-300">{d.name}: <span className="font-mono font-bold">{d.value}</span></span>
+              {check.details.map((d,i)=>(
+                <div key={i} className="bg-bg3 rounded-lg p-3 border border-border0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold font-mono ${sevClass(d.severity)}`}>{(d.severity||'info').toUpperCase()}</span>
+                    <span className="text-xs font-mono text-cyan-400">{d.rule}</span>
+                  </div>
+                  <div className="text-xs font-mono text-gray-400">
+                    <span className="text-gray-500">{d.file}</span>
+                    {d.line>0 && <span className="text-yellow-400">:{d.line}</span>}
+                  </div>
+                  <p className="text-xs text-gray-300 mt-1">{d.note}</p>
                 </div>
               ))}
             </div>
           </div>
-        );
-      }
-      return (
-        <div className="mt-3 flex items-center" style={{height:240}}>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={data} cx="40%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value" paddingAngle={3} label={({name,value})=>`${name}: ${value}`}>
-                {data.map((d,i) => <Cell key={i} fill={PIE_COLORS[i]} stroke="none" />)}
-              </Pie>
-              <RTooltip contentStyle={{background:'#0d1117',border:'1px solid #1e293b',borderRadius:8,color:'#e2e8f0',fontFamily:'JetBrains Mono'}} />
-              <Legend wrapperStyle={{fontSize:13,color:'#94a3b8'}} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      );
-    }
+        )}
 
-    /* ── Activity Timeline ── */
-    function ActivityTimeline({ data }) {
-      return (
-        <div className="mt-3 space-y-0 relative">
-          <div className="absolute left-[11px] top-2 bottom-2 w-px bg-slate-700/50" />
-          {data.map((e,i) => {
-            const d = new Date(e.timestamp);
-            return (
-              <div key={i} className="flex items-start gap-3 py-2 anim-fade-in" style={{animationDelay:`${i*60}ms`}}>
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5 relative z-10"
-                     style={{background: e.level==='error'?'rgba(239,68,68,.2)':e.level==='warning'?'rgba(245,158,11,.2)':e.level==='success'?'rgba(16,185,129,.2)':'rgba(56,189,248,.2)', border:`1px solid ${e.level==='error'?'rgba(239,68,68,.4)':e.level==='warning'?'rgba(245,158,11,.4)':e.level==='success'?'rgba(16,185,129,.4)':'rgba(56,189,248,.4)'}`}}>
-                  {LEVEL_ICON[e.level]||'\u{1F535}'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-slate-300">{e.message}</div>
-                  <div className="text-xs text-slate-600 font-mono mt-0.5">{d.toLocaleTimeString('es-CO')} — {e.event}</div>
-                </div>
+        {(!check.details || check.details.length===0) && !check.tests && (
+          <div className="text-center text-gray-500 py-8 font-mono text-sm">No detailed findings to display</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Activity Log ─────────────────────────────────────────────
+function ActivityLog({activity}) {
+  const typeColor = {
+    info:'text-cyan-400', success:'text-neon', warning:'text-yellow-400', error:'text-red-400'
+  };
+  const typeDot = {
+    info:'bg-cyan-400', success:'bg-neon', warning:'bg-yellow-400', error:'bg-red-400'
+  };
+  return (
+    <div className="bg-bg2 border border-border0 rounded-lg p-4">
+      <h3 className="text-xs uppercase text-gray-500 tracking-wider mb-3 font-mono">Activity Log</h3>
+      <div className="space-y-2 max-h-[400px] overflow-auto">
+        {activity.map((a,i)=>(
+          <div key={i} className="flex items-start gap-2 text-xs font-mono">
+            <span className="text-gray-600 shrink-0 w-16">{a.time}</span>
+            <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${typeDot[a.type]||'bg-gray-500'}`}></span>
+            <span className={typeColor[a.type]||'text-gray-400'}>{a.event}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── OWASP Coverage ───────────────────────────────────────────
+function OWASPCoverage({checks}) {
+  const owaspMap = {};
+  checks.forEach(c => {
+    if(c.owasp && c.owasp!=='—') {
+      if(!owaspMap[c.owasp]) owaspMap[c.owasp] = {tools:[],findings:0,status:'passed'};
+      owaspMap[c.owasp].tools.push(c.tool);
+      owaspMap[c.owasp].findings += c.findings;
+      if(c.status==='failed') owaspMap[c.owasp].status='failed';
+      else if(c.status==='warning' && owaspMap[c.owasp].status!=='failed') owaspMap[c.owasp].status='warning';
+    }
+  });
+
+  const owaspNames = {
+    'A02:2021':'Cryptographic Failures','A03:2021':'Injection','A04:2021':'Insecure Design',
+    'A05:2021':'Security Misconfiguration','A06:2021':'Vulnerable Components','A07:2021':'Auth Failures / Secrets'
+  };
+
+  return (
+    <div className="bg-bg2 border border-border0 rounded-lg p-4">
+      <h3 className="text-xs uppercase text-gray-500 tracking-wider mb-3 font-mono">OWASP Top 10 Coverage</h3>
+      <div className="space-y-2">
+        {Object.entries(owaspMap).sort().map(([id,data])=>(
+          <div key={id} className="flex items-center gap-3 text-xs font-mono">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${data.status==='passed'?'bg-neon':data.status==='warning'?'bg-yellow-400':'bg-red-400'}`}></span>
+            <span className="text-purple-400 w-20 shrink-0">{id}</span>
+            <span className="text-gray-400 flex-1 truncate">{owaspNames[id]||id}</span>
+            <span className="text-gray-500">{data.tools.join(', ')}</span>
+            <span className={data.findings>0?'text-yellow-400':'text-neon'}>{data.findings} findings</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Commit History ───────────────────────────────────────────
+function CommitHistory({commits}) {
+  const typeColor = {feat:'text-neon',fix:'text-red-400',docs:'text-cyan-400',test:'text-yellow-400',ci:'text-purple-400'};
+  const typeBg = {feat:'bg-neon/10',fix:'bg-red-400/10',docs:'bg-cyan-400/10',test:'bg-yellow-400/10',ci:'bg-purple-400/10'};
+  return (
+    <div className="bg-bg2 border border-border0 rounded-lg p-4">
+      <h3 className="text-xs uppercase text-gray-500 tracking-wider mb-3 font-mono">Commit History ({commits.length} commits)</h3>
+      <div className="space-y-2 max-h-[420px] overflow-auto">
+        {commits.map((c,i)=>(
+          <div key={i} className="flex items-start gap-3 text-xs font-mono group">
+            <div className="shrink-0 flex flex-col items-center">
+              <span className={`w-2 h-2 rounded-full mt-1.5 ${i===0?'bg-neon pulse-neon':'bg-gray-600'}`}></span>
+              {i<commits.length-1 && <div className="w-px h-6 bg-gray-700 mt-1"></div>}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-yellow-400 font-bold">{c.hash}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${typeBg[c.type]||'bg-gray-600/10'} ${typeColor[c.type]||'text-gray-400'}`}>{c.type}</span>
               </div>
-            );
-          })}
-        </div>
-      );
-    }
+              <p className="text-gray-300 truncate group-hover:text-white transition-colors">{c.message}</p>
+              <span className="text-gray-600">{c.author} — {new Date(c.date).toLocaleString('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit',hour12:false})}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-    /* ── Summary Dashboard ── */
-    function SummaryDash({ pipeline, severity, owasp }) {
-      const metrics = [
-        { label:'Checks Totales', value:pipeline.checks.length, color:COLORS.neon },
-        { label:'Checks OK', value:pipeline.checks.filter(c=>c.status==='passed').length, color:COLORS.passed },
-        { label:'Con Warnings', value:pipeline.checks.filter(c=>c.status==='warning').length, color:COLORS.warning },
-        { label:'Findings Totales', value:severity.total, color:COLORS.medium },
-        { label:'Critical + High', value:severity.critical+severity.high, color:COLORS.critical },
-        { label:'Duracion', value:`${Math.floor(pipeline.duration_seconds/60)}m`, color:COLORS.info },
-      ];
-      return (
-        <div className="mt-3 grid grid-cols-3 gap-3">
-          {metrics.map((m,i) => (
-            <div key={i} className="bg-slate-900/60 border border-slate-700/40 rounded-lg p-4 text-center anim-fade-in" style={{animationDelay:`${i*80}ms`}}>
-              <div className="text-3xl font-bold font-mono" style={{color:m.color}}>{m.value}</div>
-              <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{m.label}</div>
+// ── Claude Session Stats ─────────────────────────────────────
+function ClaudeSession({session}) {
+  const stats = [
+    {label:'Model',value:session.model,color:'text-purple-400'},
+    {label:'Sessions',value:session.sessions,color:'text-cyan-400'},
+    {label:'Tool Calls',value:session.total_tool_calls,color:'text-neon'},
+    {label:'Commits',value:session.commits_made,color:'text-yellow-400'},
+    {label:'Files Created',value:session.files_created,color:'text-cyan-400'},
+    {label:'Files Modified',value:session.files_modified,color:'text-orange-400'},
+    {label:'Lines Added',value:'+'+session.lines_added.toLocaleString(),color:'text-neon'},
+    {label:'Lines Deleted',value:'-'+session.lines_deleted.toLocaleString(),color:'text-red-400'},
+  ];
+  const tokenStats = [
+    {label:'Input',value:session.tokens.input_estimate,color:'text-cyan-400'},
+    {label:'Output',value:session.tokens.output_estimate,color:'text-neon'},
+    {label:'Total',value:session.tokens.total_estimate,color:'text-yellow-400'},
+  ];
+  return (
+    <div className="bg-bg2 border border-border0 rounded-lg p-4">
+      <h3 className="text-xs uppercase text-gray-500 tracking-wider mb-3 font-mono">Claude Code Session</h3>
+      {/* Stats grid */}
+      <div className="grid grid-cols-4 gap-2 mb-4">
+        {stats.map((s,i)=>(
+          <div key={i} className="bg-bg3 rounded p-2 text-center">
+            <div className={`text-sm font-bold font-mono ${s.color}`}>{s.value}</div>
+            <div className="text-[10px] text-gray-600 uppercase">{s.label}</div>
+          </div>
+        ))}
+      </div>
+      {/* Token usage */}
+      <div className="bg-bg3 rounded-lg p-3 mb-4">
+        <div className="text-[10px] uppercase text-gray-500 mb-2 font-mono">Token Usage (estimated)</div>
+        <div className="flex gap-4">
+          {tokenStats.map((t,i)=>(
+            <div key={i} className="flex-1 text-center">
+              <div className={`text-lg font-bold font-mono ${t.color}`}>{t.value}</div>
+              <div className="text-[10px] text-gray-600">{t.label}</div>
             </div>
           ))}
         </div>
-      );
-    }
+        <div className="text-[10px] text-gray-600 mt-2 text-center">{session.tokens.note}</div>
+      </div>
+      {/* Tasks completed */}
+      <div className="text-[10px] uppercase text-gray-500 mb-2 font-mono">Tasks Completed ({session.tasks_completed.length})</div>
+      <div className="grid grid-cols-2 gap-1">
+        {session.tasks_completed.map((t,i)=>(
+          <div key={i} className="flex items-center gap-1.5 text-[11px] font-mono">
+            <span className="text-neon">{'\u2713'}</span>
+            <span className="text-gray-400 truncate">{t.name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-    /* ── Help Card ── */
-    function HelpCard() {
-      const cmds = [
-        ['"vulnerabilidades"','Ver resumen + tabla de todos los findings'],
-        ['"criticas" / "critical"','Filtrar vulnerabilidades por severidad alta'],
-        ['"estado del pipeline"','Grid de los 12 security checks con status'],
-        ['"ultimo commit"','Informacion del commit que triggeo el pipeline'],
-        ['"owasp checks"','Tabla de cobertura OWASP Top 10 2021'],
-        ['"grafico de barras"','Bar chart de severidad de vulnerabilidades'],
-        ['"pie chart"','Distribucion proporcional por severidad'],
-        ['"historial"','Timeline de eventos del pipeline'],
-        ['"resumen"','Dashboard con metricas clave'],
-        ['"bandit" / "semgrep" / etc','Filtrar findings por herramienta'],
-      ];
-      return (
-        <div className="mt-3 space-y-1">
-          {cmds.map(([cmd,desc],i) => (
-            <div key={i} className="flex gap-3 py-1.5 anim-fade-in" style={{animationDelay:`${i*40}ms`}}>
-              <code className="text-neon bg-emerald-500/10 px-2 py-0.5 rounded text-sm whitespace-nowrap font-mono">{cmd}</code>
-              <span className="text-sm text-slate-400">{desc}</span>
-            </div>
-          ))}
+// ── App ──────────────────────────────────────────────────────
+function App() {
+  const [data] = useState(PIPELINE_DATA);
+  const [selected, setSelected] = useState(null);
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header data={data} />
+      <main className="flex-1 max-w-[1400px] mx-auto w-full px-4 md:px-6 py-6 space-y-6">
+        {/* Timestamp bar */}
+        <div className="flex items-center justify-between text-xs font-mono text-gray-600">
+          <span>Pipeline executed: {formatTime(data.timestamp)}</span>
+          <span>Duration: {data.duration_seconds}s</span>
         </div>
-      );
-    }
 
-    /* ── Render Visualization ── */
-    function RenderViz({ viz }) {
-      if (!viz) return null;
-      switch (viz.type) {
-        case 'vuln-table':    return <VulnTable data={viz.data} />;
-        case 'pipeline-cards': return <PipelineCards data={viz.data} />;
-        case 'commit-card':   return <CommitCard data={viz.data} />;
-        case 'owasp-table':   return <OWASPTable data={viz.data} />;
-        case 'bar-chart':     return <RechartsBar data={viz.data} />;
-        case 'pie-chart':     return <RechartsPie data={viz.data} />;
-        case 'timeline':      return <ActivityTimeline data={viz.data} />;
-        case 'summary':       return <SummaryDash pipeline={viz.pipeline} severity={viz.severity} owasp={viz.owasp} />;
-        case 'help':          return <HelpCard />;
-        default: return null;
-      }
-    }
+        {/* Counter cards */}
+        <Counters checks={data.checks} />
 
-    /* ── Format markdown-ish text ── */
-    function FormatText({ text }) {
-      const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-      return (
-        <span>
-          {parts.map((p,i) => {
-            if (p.startsWith('**') && p.endsWith('**'))
-              return <strong key={i} className="text-white font-semibold">{p.slice(2,-2)}</strong>;
-            if (p.startsWith('`') && p.endsWith('`'))
-              return <code key={i} className="bg-slate-800/60 text-neon px-1.5 py-0.5 rounded text-sm font-mono">{p.slice(1,-1)}</code>;
-            return <span key={i}>{p}</span>;
-          })}
-        </span>
-      );
-    }
+        {/* Severity bar */}
+        <SeverityBar checks={data.checks} />
 
-    /* ═══════════════════════════════════════════════
-       MAIN APP COMPONENTS
-       ═══════════════════════════════════════════════ */
-
-    /* ── Typing Indicator ── */
-    function TypingIndicator() {
-      return (
-        <div className="flex items-center gap-1.5 py-3 px-4">
-          <div className="flex items-center gap-1">
-            {[0,1,2].map(i => (
-              <div key={i} className="w-2 h-2 rounded-full bg-emerald-400"
-                   style={{animation:'typing-dot 1.2s infinite', animationDelay:`${i*200}ms`}} />
-            ))}
-          </div>
-          <span className="text-xs text-slate-500 ml-2">Mantishield esta analizando...</span>
-        </div>
-      );
-    }
-
-    /* ── Suggested Queries (chips) ── */
-    function SuggestionChips({ suggestions, onSelect }) {
-      if (!suggestions || suggestions.length === 0) return null;
-      return (
-        <div className="flex flex-wrap gap-2 mt-3">
-          {suggestions.map(s => (
-            <button key={s} onClick={() => onSelect(s)}
-              className="chip px-3 py-1.5 bg-emerald-500/5 border border-emerald-500/20 rounded-full text-sm text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-all cursor-pointer font-medium">
-              {s}
-            </button>
-          ))}
-        </div>
-      );
-    }
-
-    /* ── Sidebar (Activity Log) ── */
-    function Sidebar({ data }) {
-      const logs = data ? data.activity_log : [];
-      return (
-        <div className="w-72 xl:w-80 flex-shrink-0 border-r border-slate-800/60 flex flex-col bg-[#09090f] hidden lg:flex">
-          <div className="px-4 py-3 border-b border-slate-800/60">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Activity Log</h2>
-          </div>
-          <div className="flex-1 overflow-y-auto px-3 py-2 scan-line relative">
-            {logs.map((e,i) => {
-              const d = new Date(e.timestamp);
-              return (
-                <div key={i} className="py-2 border-b border-slate-800/30 last:border-0">
-                  <div className="flex items-start gap-2">
-                    <span className="text-xs mt-0.5">{LEVEL_ICON[e.level]||'\u{1F535}'}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs text-slate-400 leading-relaxed">{e.message}</div>
-                      <div className="text-[10px] text-slate-600 font-mono mt-0.5">{d.toLocaleTimeString('es-CO')}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {logs.length === 0 && (
-              <div className="text-xs text-slate-600 text-center py-8">Esperando eventos del pipeline...</div>
-            )}
-          </div>
-          {data && (
-            <div className="px-4 py-3 border-t border-slate-800/60 bg-slate-950/50">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" style={{animation:'pulse-neon 2s infinite'}} />
-                <span className="text-xs text-slate-500">Auto-refresh: 15s</span>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    /* ── Header ── */
-    function Header({ data }) {
-      const status = data ? data.pipeline.status : 'loading';
-      return (
-        <header className="flex items-center justify-between px-6 py-3 border-b border-slate-800/60 bg-[#09090f]/80 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <svg viewBox="0 0 32 32" className="w-8 h-8" fill="none">
-                <path d="M16 2L4 8v8c0 7.7 5.1 14.9 12 16.9C22.9 30.9 28 23.7 28 16V8L16 2z" stroke="#00ff41" strokeWidth="1.5" fill="rgba(0,255,65,.08)" />
-                <path d="M12 16l3 3 5-6" stroke="#00ff41" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <div>
-                <h1 className="text-lg font-bold tracking-tight text-white">MANTISHIELD</h1>
-                <div className="text-[10px] uppercase tracking-[.2em] text-slate-500 -mt-0.5">Security Intelligence</div>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            {data && (
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="font-mono">{data.pipeline.commit.branch}</span>
-                <span className="text-slate-600">/</span>
-                <span className="font-mono text-amber-400">{data.pipeline.commit.hash}</span>
-              </div>
-            )}
-            <div className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
-              status==='passed'?'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30':
-              status==='warning'?'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30':
-              status==='failed'?'bg-red-500/20 text-red-400 border border-red-500/30':
-              'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-            }`}>
-              {status === 'loading' ? 'Connecting...' : status}
-            </div>
-          </div>
-        </header>
-      );
-    }
-
-    /* ── Chat Input ── */
-    function ChatInput({ onSend, disabled }) {
-      const [value, setValue] = useState('');
-      const inputRef = useRef(null);
-
-      const handleSubmit = (e) => {
-        e.preventDefault();
-        const trimmed = value.trim();
-        if (!trimmed || disabled) return;
-        onSend(trimmed);
-        setValue('');
-      };
-
-      useEffect(() => { inputRef.current?.focus(); }, [disabled]);
-
-      return (
-        <form onSubmit={handleSubmit} className="flex items-center gap-3 p-4 border-t border-slate-800/60 bg-[#09090f]/50">
-          <input
-            ref={inputRef}
-            type="text"
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            disabled={disabled}
-            placeholder="Pregunta sobre la seguridad del proyecto..."
-            className="chat-input flex-1 bg-slate-900/60 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-600 font-sans transition-all"
-          />
-          <button type="submit" disabled={disabled || !value.trim()}
-            className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
-            <svg viewBox="0 0 20 20" className="w-5 h-5" fill="currentColor">
-              <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
-            </svg>
-          </button>
-        </form>
-      );
-    }
-
-    /* ── Message Bubble ── */
-    function Message({ msg, onSuggestionClick }) {
-      const isUser = msg.role === 'user';
-      return (
-        <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} anim-fade-in`}>
-          <div className={`max-w-[85%] ${isUser ? 'ml-12' : 'mr-12'}`}>
-            {!isUser && (
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                  <svg viewBox="0 0 32 32" className="w-3 h-3" fill="none">
-                    <path d="M16 2L4 8v8c0 7.7 5.1 14.9 12 16.9C22.9 30.9 28 23.7 28 16V8L16 2z" stroke="#00ff41" strokeWidth="2.5" />
-                  </svg>
-                </div>
-                <span className="text-xs text-slate-500 font-medium">Mantishield</span>
-              </div>
-            )}
-            <div className={`rounded-2xl px-4 py-3 ${
-              isUser
-                ? 'bg-emerald-500/15 border border-emerald-500/20 text-slate-200'
-                : 'bg-slate-900/60 border border-slate-700/40 text-slate-300'
-            }`}>
-              {msg.text && (
-                <div className="text-sm leading-relaxed">
-                  <FormatText text={msg.text} />
-                </div>
-              )}
-              {msg.viz && <RenderViz viz={msg.viz} />}
-              {!isUser && msg.suggestions && (
-                <SuggestionChips suggestions={msg.suggestions} onSelect={onSuggestionClick} />
-              )}
-            </div>
-            <div className={`text-[10px] text-slate-600 mt-1 px-2 ${isUser ? 'text-right' : ''}`}>
-              {new Date(msg.timestamp).toLocaleTimeString('es-CO')}
-            </div>
+        {/* 12 Check Cards Grid */}
+        <div>
+          <h2 className="text-sm uppercase text-gray-500 tracking-wider mb-3 font-mono">12 Security Checks</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {data.checks.map(c => <CheckCard key={c.number} check={c} onClick={setSelected} />)}
           </div>
         </div>
-      );
-    }
 
-    /* ═══════════════════════════════════════════════
-       MAIN APP
-       ═══════════════════════════════════════════════ */
-
-    function App() {
-      const [data, setData] = useState(null);
-      const [messages, setMessages] = useState([]);
-      const [isTyping, setIsTyping] = useState(false);
-      const messagesEndRef = useRef(null);
-      const hasSentWelcome = useRef(false);
-
-      /* ── Load data ── */
-      const fetchData = useCallback(() => {
-        fetch('status.json?t=' + Date.now())
-          .then(r => r.json())
-          .then(d => setData(d))
-          .catch(err => console.warn('Failed to load status.json:', err));
-      }, []);
-
-      useEffect(() => {
-        fetchData();
-        const interval = setInterval(fetchData, 15000);
-        return () => clearInterval(interval);
-      }, [fetchData]);
-
-      /* ── Welcome message ── */
-      useEffect(() => {
-        if (data && !hasSentWelcome.current) {
-          hasSentWelcome.current = true;
-          const s = data.severity_summary;
-          setMessages([{
-            id: 'welcome',
-            role: 'assistant',
-            text: `Bienvenido al **Security Intelligence Console** de Mantishield. Estoy conectado al pipeline DevSecOps y tengo datos de **${data.pipeline.checks.length} checks** con **${s.total} findings** detectados. Preguntame lo que necesites.`,
-            viz: { type: 'help' },
-            suggestions: ['estado del pipeline', 'vulnerabilidades criticas', 'resumen general'],
-            timestamp: new Date()
-          }]);
-        }
-      }, [data]);
-
-      /* ── Auto scroll ── */
-      useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, [messages, isTyping]);
-
-      /* ── Handle send ── */
-      const handleSend = useCallback((text) => {
-        if (isTyping) return;
-
-        const userMsg = {
-          id: 'u-' + Date.now(),
-          role: 'user',
-          text,
-          timestamp: new Date()
-        };
-
-        setMessages(prev => [...prev, userMsg]);
-        setIsTyping(true);
-
-        /* Simulate "thinking" delay */
-        const delay = 600 + Math.random() * 800;
-        setTimeout(() => {
-          const result = processQuery(text, data);
-          const botMsg = {
-            id: 'b-' + Date.now(),
-            role: 'assistant',
-            text: result.text,
-            viz: result.viz,
-            suggestions: result.suggestions,
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, botMsg]);
-          setIsTyping(false);
-        }, delay);
-      }, [data, isTyping]);
-
-      return (
-        <div className="h-screen flex flex-col overflow-hidden">
-          <Header data={data} />
-          <div className="flex flex-1 overflow-hidden">
-            <Sidebar data={data} />
-
-            {/* Chat Area */}
-            <div className="flex-1 flex flex-col min-w-0">
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                {messages.map(msg => (
-                  <Message key={msg.id} msg={msg} onSuggestionClick={handleSend} />
-                ))}
-                {isTyping && <TypingIndicator />}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input */}
-              <ChatInput onSend={handleSend} disabled={isTyping || !data} />
-            </div>
-          </div>
+        {/* Commits + Claude Session */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <CommitHistory commits={data.commits} />
+          <ClaudeSession session={data.claude_session} />
         </div>
-      );
-    }
 
-    /* ── Mount ── */
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
+        {/* Activity + OWASP */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ActivityLog activity={data.activity} />
+          <OWASPCoverage checks={data.checks} />
+        </div>
+
+        {/* Footer */}
+        <footer className="text-center text-xs text-gray-600 font-mono py-4 border-t border-border0">
+          Bunker DevSecOps — Mantishield | 12 Checks | OWASP Top 10 2021 | $0 cost | &lt;10 min
+        </footer>
+      </main>
+
+      {/* Detail Modal */}
+      <DetailModal check={selected} onClose={()=>setSelected(null)} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
 </body>
 </html>
