@@ -42,7 +42,14 @@ echo ""
 # ── 2. Conectividad VPN ─────────────────────────────────────
 echo -e "${BOLD}2. Conectividad VPN${NC}"
 
-for NODE_NAME NODE_IP in "VPN Hub" "$VPN_HUB" "Parrot OS" "$PARROT" "EC2 Agent" "$AGENT"; do
+declare -A NODES=(
+    ["VPN Hub"]="$VPN_HUB"
+    ["Parrot OS"]="$PARROT"
+    ["EC2 Agent"]="$AGENT"
+)
+
+for NODE_NAME in "VPN Hub" "Parrot OS" "EC2 Agent"; do
+    NODE_IP="${NODES[$NODE_NAME]}"
     if ping -c 1 -W 2 "$NODE_IP" &>/dev/null; then
         pass "$NODE_NAME ($NODE_IP) — alcanzable"
     else
