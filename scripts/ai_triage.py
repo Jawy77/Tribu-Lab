@@ -15,6 +15,8 @@ Guardrails:
     va delimitado y el system prompt le prohibe obedecer instrucciones que encuentre.
   - Sin tools, sin acceso a red ni a secretos: una sola llamada con salida estructurada.
   - Token de GitHub de solo `pull-requests: write` (solo comenta) en el workflow.
+  - Auth con Workload Identity Federation: sin API key de larga duracion; el JWT
+    OIDC de GitHub se cambia por un token efimero de una service account.
 
 Uso:
     python scripts/ai_triage.py --sarif-dir sarif/ --base <sha> --out triage.md
@@ -27,6 +29,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+from gha_oidc import has_anthropic_credentials, refresh_identity_token
 
 MODEL = "claude-opus-5-5"
 MAX_FINDINGS = 40
@@ -229,10 +233,11 @@ def main() -> int:
             "<!-- tribu-ai-triage -->\n## 🤖 AI triage\n\nSin hallazgos en los archivos de este PR. ✅\n"
         )
         return 0
-    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
-        print("Sin credenciales de Anthropic: se omite el triage (no bloqueante).")
+    if not has_anthropic_credentials():
+        print("Sin credenciales de Anthropic (WIF/API key): se omite el triage (no bloqueante).")
         return 0
     try:
+        refresh_identity_token()  # JWT fresco: GitHub no permite reusar un jti
         result = call_claude(build_prompt(findings))
     except Exception as exc:  # el triage es asesor: un fallo nunca rompe el pipeline
         print(f"Triage omitido: {type(exc).__name__}: {exc}", file=sys.stderr)

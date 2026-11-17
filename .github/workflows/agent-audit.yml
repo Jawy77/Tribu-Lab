@@ -22,11 +22,17 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Solo desde main: la regla WIF de esta auditoria acepta unicamente
+    # sub=repo:<owner>/<repo>:ref:refs/heads/main + este archivo de workflow.
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
       issues: write
+      id-token: write # OIDC → Workload Identity Federation con Anthropic
     env:
       TASKFLOW: ${{ inputs.taskflow || 'agents/taskflows/audit-critical-paths.yml' }}
+      ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_RULE_ID_AGENT_AUDIT }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,12 +41,17 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install anthropic==2.9.0 pyyaml==6.0.3
-      - name: Ejecutar taskflow
+      - name: Variables WIF (no exportar vacias)
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SVAC: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "Sin ANTHROPIC_API_KEY: auditoria omitida." >> "$GITHUB_STEP_SUMMARY"; exit 0
+          echo "ANTHROPIC_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/gha-jwt" >> "$GITHUB_ENV"
+          [ -n "$SVAC" ] && echo "ANTHROPIC_SERVICE_ACCOUNT_ID=$SVAC" >> "$GITHUB_ENV"
+          true
+      - name: Ejecutar taskflow
+        run: |
+          if [ -z "$ANTHROPIC_FEDERATION_RULE_ID" ] || [ -z "$ANTHROPIC_ORGANIZATION_ID" ]; then
+            echo "WIF sin configurar (vars ANTHROPIC_*): auditoria omitida." >> "$GITHUB_STEP_SUMMARY"; exit 0
           fi
           python scripts/agent_audit.py "$TASKFLOW" --out audit.md --json-out audit.json
           cat audit.md >> "$GITHUB_STEP_SUMMARY"

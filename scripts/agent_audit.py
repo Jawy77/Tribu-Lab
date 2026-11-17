@@ -22,6 +22,8 @@ from pathlib import Path
 
 import yaml
 
+from gha_oidc import refresh_identity_token
+
 SYSTEM_PROMPT = """\
 Eres un auditor de seguridad ofensiva revisando codigo e infraestructura de un \
 repositorio autorizado. Sigues una metodologia por tareas encadenadas; en cada \
@@ -139,6 +141,9 @@ def main() -> int:
     results: dict = {}
     for task in flow["tasks"]:
         print(f"→ tarea {task['id']} ...", flush=True)
+        # Cada tarea puede durar minutos y el token de Anthropic minteado via WIF
+        # vive poco: refrescamos el JWT de GitHub antes de cada una (jti nuevo).
+        refresh_identity_token()
         results[task["id"]] = run_task(client, flow, task, files_block, results)
 
     Path(args.json_out).write_text(json.dumps(results, ensure_ascii=False, indent=2))

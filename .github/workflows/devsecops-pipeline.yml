@@ -37,6 +37,7 @@ jobs:
       contents: read
       security-events: write # subir SARIF a Code Scanning
       pull-requests: write # solo para el comentario del agente de triage
+      id-token: write # OIDC → Workload Identity Federation con Anthropic (sin API key)
     with:
       python-version: "3.12"
       requirements: "vulnerable_app/requirements.txt docker/openclaw/requirements.txt requirements.txt"
@@ -44,8 +45,10 @@ jobs:
       image-context: "."
       iac-dir: "terraform"
       ai-triage: true
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # IDs de WIF como *variables* del repo (no son secretos). Sin ellas, el triage se omite.
+      anthropic-organization-id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      anthropic-federation-rule-id: ${{ vars.ANTHROPIC_RULE_ID_PR_TRIAGE }}
+      anthropic-service-account-id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
 
   notify:
     name: "📡 Notify"

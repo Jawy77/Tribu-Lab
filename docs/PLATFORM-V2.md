@@ -64,6 +64,8 @@ estricto se puede adoptar en repos con historia. La deuda se paga con Dependabot
 ## Guardrails de los agentes
 
 - Corren con **token mínimo**: triage = `pull-requests: write`; audit = `issues: write`.
+- **Sin API keys**: identidad federada (OIDC) acotada por regla a este repo, a este
+  workflow y al tipo de evento; token efímero y `jti` de un solo uso.
 - **No corren en PRs de forks** (sin secretos y con el mayor riesgo de prompt injection).
 - Todo el contenido del repo va delimitado como `<untrusted>` y el system prompt
   prohíbe obedecer instrucciones embebidas. Si sospecha una inyección, el agente
@@ -99,6 +101,12 @@ documentadas con `nosemgrep` + justificación.
 
 ## Activación
 
-1. Secret opcional `ANTHROPIC_API_KEY` (sin él, la capa AI se omite sin romper nada).
+1. **Workload Identity Federation (sin API keys).** Los agentes se autentican con el
+   JWT OIDC de GitHub (`aud=https://api.anthropic.com`), que Anthropic cambia por un
+   token efímero (~10 min) de una service account. No hay secreto que filtrar ni rotar.
+   Variables del repo (no son secretos): `ANTHROPIC_ORGANIZATION_ID`,
+   `ANTHROPIC_RULE_ID_PR_TRIAGE`, `ANTHROPIC_RULE_ID_AGENT_AUDIT` y, opcional,
+   `ANTHROPIC_SERVICE_ACCOUNT_ID`. Sin ellas, la capa AI se omite sin romper nada.
+   Detalle de las reglas en [`docs/WIF-SETUP.md`](WIF-SETUP.md).
 2. `./scripts/setup_branch_protection.sh` → check requerido: `platform / 🚦 Security Gate`.
 3. Activar *Private vulnerability reporting* y *Code scanning* en Settings → Security.

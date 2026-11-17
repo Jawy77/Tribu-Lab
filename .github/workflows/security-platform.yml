@@ -40,12 +40,27 @@ on:
         type: string
         default: ""
       ai-triage:
-        description: "Habilitar el agente de triage en PRs (requiere ANTHROPIC_API_KEY)"
+        description: "Habilitar el agente de triage en PRs (requiere WIF configurado)"
         type: boolean
         default: true
-    secrets:
-      ANTHROPIC_API_KEY:
-        required: false
+      # Workload Identity Federation (OIDC de GitHub → token efimero de Anthropic).
+      # Sin API keys de larga duracion. Estos IDs no son secretos.
+      anthropic-organization-id:
+        description: "UUID de la organizacion de Anthropic ('' = triage omitido)"
+        type: string
+        default: ""
+      anthropic-federation-rule-id:
+        description: "fdrl_... de la regla que acepta el sub repo:<owner>/<repo>:pull_request"
+        type: string
+        default: ""
+      anthropic-service-account-id:
+        description: "svac_... (opcional; si se pone, debe ser la cuenta de la regla)"
+        type: string
+        default: ""
+      anthropic-workspace-id:
+        description: "wrkspc_... (solo si la regla cubre varios workspaces)"
+        type: string
+        default: ""
     outputs:
       gate:
         description: "passed | failed"
@@ -340,12 +355,16 @@ jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
   # Capa AI — asesora, NO bloqueante. Solo PRs del mismo repo (los forks no
-  # reciben secretos y su contenido es el de mayor riesgo de prompt injection).
+  # reciben token OIDC y su contenido es el de mayor riesgo de prompt injection).
+  # Auth: Workload Identity Federation. GitHub firma un JWT de ~5 min para este
+  # job; Anthropic lo valida contra la regla (sub + aud + repo + workflow) y
+  # devuelve un token efimero de la service account. No hay secreto que robar.
   ai-triage:
     name: "🤖 AI triage (advisory)"
     needs: [secrets, sast, container, iac]
     if: >-
       always() && inputs.ai-triage &&
+      inputs.anthropic-federation-rule-id != '' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -354,6 +373,10 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      id-token: write # solo para pedir el JWT OIDC de GitHub
+    env:
+      ANTHROPIC_ORGANIZATION_ID: ${{ inputs.anthropic-organization-id }}
+      ANTHROPIC_FEDERATION_RULE_ID: ${{ inputs.anthropic-federation-rule-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -368,9 +391,18 @@ jobs:
           pattern: sarif-*
           path: sarif
           merge-multiple: true
-      - name: Triage de hallazgos del PR
+      - name: Variables WIF opcionales (solo si vienen; un "" vacio ocupa su lugar en la cadena de credenciales)
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SVAC: ${{ inputs.anthropic-service-account-id }}
+          WRKSPC: ${{ inputs.anthropic-workspace-id }}
+        run: |
+          echo "ANTHROPIC_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/gha-jwt" >> "$GITHUB_ENV"
+          [ -n "$SVAC" ] && echo "ANTHROPIC_SERVICE_ACCOUNT_ID=$SVAC" >> "$GITHUB_ENV"
+          [ -n "$WRKSPC" ] && echo "ANTHROPIC_WORKSPACE_ID=$WRKSPC" >> "$GITHUB_ENV"
+          true
+      - name: Triage de hallazgos del PR
+        # El script pide un JWT fresco a GitHub (aud=https://api.anthropic.com)
+        # justo antes de llamar al API: los JWT de GitHub traen jti y no se reusan.
         run: python scripts/ai_triage.py --sarif-dir sarif --base "$BASE_SHA" --out triage.md
       - name: Comentar en el PR (actualiza el comentario previo)
         if: hashFiles('triage.md') != ''
