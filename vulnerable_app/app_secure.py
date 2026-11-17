@@ -148,6 +148,7 @@ def fetch_url():
     """Seguro: solo dominios en allowlist, solo HTTP/HTTPS."""
     import urllib.request
 
+    # nosemgrep: python.django.security.injection.ssrf.ssrf-injection-urllib.ssrf-injection-urllib -- excepcion revisada: esquema + allowlist de dominios (ver abajo)
     url = request.args.get("url", "")
     if not url:
         return jsonify({"error": "URL parameter required"}), 400
