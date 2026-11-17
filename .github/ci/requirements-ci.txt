@@ -1,4 +1,5 @@
 # Herramientas del pipeline con version fija (Dependabot las actualiza con cooldown).
+# Se instalan AISLADAS (pipx) por job: semgrep, checkov y pip-audit tienen dependencias incompatibles entre si.
 # Una herramienta de seguridad sin pin es un vector de supply chain.
 semgrep==1.185.0
 bandit[sarif]==1.9.4
