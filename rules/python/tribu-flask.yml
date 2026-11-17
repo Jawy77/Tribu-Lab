@@ -1,0 +1,110 @@
+# =============================================================================
+# Reglas propias — fase CODIFY de Find → Extract → Codify → Scale
+# Cada regla nace de un hallazgo validado (vulnerable_app/ = el "Find").
+# Se prueban con:  semgrep --test rules/
+# Severidad ERROR = bloquea el PR (gate determinista). WARNING = solo reporta.
+# =============================================================================
+rules:
+  - id: tribu.flask.sqli-string-built-query
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Query SQL construida con interpolación de strings y ejecutada con
+      $CUR.execute(). Usa parámetros: cursor.execute("... WHERE x = ?", (val,)).
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021"
+      origin: "Find: vulnerable_app/app.py#get_user"
+    patterns:
+      - pattern-either:
+          - pattern: $CUR.execute(f"...", ...)
+          - pattern: $CUR.execute("..." % $X, ...)
+          - pattern: $CUR.execute("..." + $X, ...)
+          - pattern: $CUR.execute("...".format(...), ...)
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      $Q = f"..."
+                      ...
+                  - pattern-inside: |
+                      $Q = "...".format(...)
+                      ...
+                  - pattern-inside: |
+                      $Q = "..." % $X
+                      ...
+              - pattern: $CUR.execute($Q, ...)
+
+  - id: tribu.flask.command-injection-shell-true
+    languages: [python]
+    severity: ERROR
+    message: >-
+      subprocess con shell=True y un comando no literal. Pasa argumentos como
+      lista y sin shell=True.
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A03:2021"
+      origin: "Find: vulnerable_app/app.py#ping_host"
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FN($CMD, ..., shell=True, ...)
+      - pattern-not: subprocess.$FN("...", ..., shell=True, ...)
+
+  - id: tribu.flask.untrusted-input-to-dangerous-sink
+    languages: [python]
+    severity: ERROR
+    mode: taint
+    message: >-
+      Input del request llega sin validar a un sink peligroso
+      (deserialización, filesystem o red). Valida/normaliza antes de usarlo.
+    metadata:
+      cwe: "CWE-502 / CWE-22 / CWE-918"
+      owasp: "A08:2021 / A01:2021 / A10:2021"
+      origin: "Find: vulnerable_app/app.py#load_data,read_file,fetch_url"
+    pattern-sources:
+      - pattern-either:
+          - pattern: flask.request.args.get(...)
+          - pattern: flask.request.form.get(...)
+          - pattern: flask.request.get_data(...)
+          - pattern: flask.request.get_json(...)
+          - pattern: flask.request.data
+          - pattern: flask.request.values.get(...)
+    pattern-sanitizers:
+      - pattern: os.path.basename(...)
+      - pattern: werkzeug.utils.secure_filename(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: pickle.loads(...)
+          - pattern: pickle.load(...)
+          - pattern: yaml.load(...)
+          - pattern: open(...)
+          - pattern: urllib.request.urlopen(...)
+          - pattern: requests.$METHOD(...)
+
+  - id: tribu.flask.debug-enabled
+    languages: [python]
+    severity: ERROR
+    message: Flask con debug=True expone el debugger de Werkzeug (RCE).
+    metadata:
+      cwe: "CWE-94"
+      owasp: "A05:2021"
+      origin: "Find: vulnerable_app/app.py#__main__"
+    pattern: $APP.run(..., debug=True, ...)
+
+  - id: tribu.python.hardcoded-credential
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Credencial hardcodeada en $NAME. Léela de variables de entorno o de un
+      secret manager.
+    metadata:
+      cwe: "CWE-798"
+      owasp: "A07:2021"
+      origin: "Find: vulnerable_app/app.py (SECRET_KEY, DATABASE_PASSWORD, API_KEY)"
+    patterns:
+      - pattern: $NAME = "$VALUE"
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i)^.*(secret|passw(or)?d|pwd|api_?key|token|private_?key).*$
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: ^.{6,}$

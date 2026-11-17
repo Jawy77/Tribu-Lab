@@ -1,0 +1,60 @@
+# =============================================================================
+# 🔎 Agent audit — fase FIND (semanal + manual)
+# Un agente LLM recorre las rutas criticas con un taskflow (map → hunt →
+# refute → extract) y abre un issue `needs-validation` con candidatos.
+# HITL: nada bloquea hasta que un humano valida (PoC) y CODIFICA la regla.
+# =============================================================================
+name: "🔎 Agent audit (Find)"
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # lunes 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      taskflow:
+        description: "Taskflow a ejecutar"
+        default: "agents/taskflows/audit-critical-paths.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      TASKFLOW: ${{ inputs.taskflow || 'agents/taskflows/audit-critical-paths.yml' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install anthropic==2.9.0 pyyaml==6.0.3
+      - name: Ejecutar taskflow
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "Sin ANTHROPIC_API_KEY: auditoria omitida." >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          python scripts/agent_audit.py "$TASKFLOW" --out audit.md --json-out audit.json
+          cat audit.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Abrir issue para validacion humana
+        if: hashFiles('audit.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create needs-validation --color FBCA04 --description "Hallazgo de agente sin validar" 2>/dev/null || true
+          gh issue create --title "Agent audit $(date -u +%F): candidatos para validar" \
+            --label needs-validation --body-file audit.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: agent-audit
+          path: audit.*
+          if-no-files-found: ignore

@@ -1,0 +1,8 @@
+# La plataforma de seguridad tiene duenos: cambios aqui requieren review.
+/.github/                @Jawy77
+/rules/                  @Jawy77
+/agents/                 @Jawy77
+/scripts/                @Jawy77
+/.gitleaks.toml          @Jawy77
+/.gitleaksignore         @Jawy77
+/.semgrepignore          @Jawy77

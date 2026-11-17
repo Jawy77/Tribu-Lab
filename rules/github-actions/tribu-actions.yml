@@ -1,0 +1,30 @@
+# Reglas de supply chain para GitHub Actions (patron "Extract" de la charla
+# del GitHub Security Lab: pull_request_target inseguro, actions sin pin).
+rules:
+  - id: tribu.gha.action-not-pinned-to-sha
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Action de terceros referenciada por tag/branch. Un tag es mutable (caso
+      tj-actions/changed-files, 2025). Fija por SHA de 40 caracteres y deja que
+      Dependabot lo actualice.
+    metadata:
+      cwe: "CWE-829"
+      owasp: "A08:2021"
+    paths:
+      include: ["*.yml", "*.yaml"]
+    pattern-regex: 'uses:\s*["'']?(?!\./|docker://)[\w.-]+/[\w./-]+@(?![0-9a-f]{40}\b)[\w.-]+'
+
+  - id: tribu.gha.pull-request-target-checkout-head
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      pull_request_target corre con secretos y token de escritura; hacer
+      checkout del HEAD del PR ejecuta codigo de un fork no confiable con esos
+      privilegios ("pwn request"). Usa pull_request o separa en dos workflows.
+    metadata:
+      cwe: "CWE-94"
+      owasp: "A08:2021"
+    paths:
+      include: ["*.yml", "*.yaml"]
+    pattern-regex: '(?s)pull_request_target.*?github\.event\.pull_request\.head\.(sha|ref)'

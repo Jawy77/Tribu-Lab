@@ -1,0 +1,7 @@
+# Fixtures intencionalmente vulnerables (se prueban con `semgrep --test rules/`)
+rules/
+tests/
+.git/
+.venv/
+venv/
+dist/

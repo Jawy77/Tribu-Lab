@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # devsecops-bunker-workshop/ es copia de respaldo empaquetada
 EXCLUDED_DIRS = {
     "vulnerable_app",
+    "rules",  # fixtures intencionalmente vulnerables de las reglas Semgrep
     "tests",
     "devsecops-bunker-workshop",
     "devsecops-pipeline",
