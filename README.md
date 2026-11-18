@@ -37,7 +37,29 @@
 
 ---
 
-## Los 12 Checks de Seguridad
+## 🚀 v2 — De "Bunker" a Security Platform
+
+> **v1 alertaba; v2 bloquea.** En v1 los 12 checks corrían con `continue-on-error`/`|| true`,
+> así que `main` quedaba en verde con 7 vulnerabilidades plantadas, y el propio pipeline
+> tenía 20 actions sin fijar por SHA. v2 aplica *Security Platform Engineering* y la
+> metodología **Find → Extract → Codify → Scale** del GitHub Security Lab.
+
+| Pieza | Archivo | Rol |
+|---|---|---|
+| Paved road | [`.github/workflows/security-platform.yml`](.github/workflows/security-platform.yml) | Reusable workflow: cualquier repo lo consume con unas 10 líneas |
+| Gate determinista | job `🚦 Security Gate` | Único check requerido. Bloquea solo lo **nuevo** (diff-aware) |
+| Codify | [`rules/`](rules/) | Reglas Semgrep propias **con tests** (`semgrep --test rules/`) |
+| Triage AI | [`scripts/ai_triage.py`](scripts/ai_triage.py) | Comenta TP/FP, alcanzabilidad y fix en el PR. **Nunca bloquea** |
+| Find (agente) | [`agents/taskflows/`](agents/taskflows/) + [`agent-audit.yml`](.github/workflows/agent-audit.yml) | map → hunt → refute → extract → issue `needs-validation` (HITL) |
+| Supply chain | [`release.yml`](.github/workflows/release.yml), [`dependabot.yml`](.github/dependabot.yml) | SHA pinning, mínimo privilegio, SBOM, provenance SLSA, cosign keyless, cooldown |
+| Política | [`SECURITY.md`](SECURITY.md) | Reglas para reportes, incluidos los asistidos por IA |
+
+**Regla de oro:** *el agente descubre y prioriza; el determinismo bloquea.*
+Detalle completo en [`docs/PLATFORM-V2.md`](docs/PLATFORM-V2.md).
+
+---
+
+## Los 12 Checks de Seguridad (v1, referencia histórica)
 
 Cada push a `main` y cada Pull Request ejecuta automaticamente estos 12 checks via GitHub Actions:
 

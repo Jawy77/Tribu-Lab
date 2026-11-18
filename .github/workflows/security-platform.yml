@@ -1,0 +1,459 @@
+# =============================================================================
+# 🛡️ Security Platform — reusable workflow (el "paved road")
+# Tribu | Hacklab Bogota | Ethereum Bogota | Mantishield
+#
+# Cualquier repo lo consume con ~10 lineas (ver devsecops-pipeline.yml).
+# El equipo de producto no configura herramientas: hereda la plataforma.
+#
+# POLITICA (determinista, auditable):
+#   BLOQUEA en PR  → secretos nuevos · SAST ERROR nuevos (diff-aware) ·
+#                    vulns nuevas en dependencias · CRITICAL con fix en imagen ·
+#                    reglas propias sin tests · actions sin pin por SHA ·
+#                    tests de seguridad rotos
+#   REPORTA        → todo lo demas va a Code Scanning (SARIF) y aparece en el PR
+#   ASESORA (AI)   → agente de triage comenta veredicto/fix; nunca bloquea
+#
+# La deuda previa NO bloquea a nadie (baseline); lo nuevo SI. Asi un gate
+# estricto es adoptable en repos con historia.
+# =============================================================================
+name: "Security Platform (reusable)"
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        default: "3.12"
+      requirements:
+        description: "requirements*.txt a auditar (separados por espacio)"
+        type: string
+        default: "requirements.txt"
+      image-dockerfile:
+        description: "Dockerfile de la imagen a construir y escanear ('' = omitir)"
+        type: string
+        default: ""
+      image-context:
+        type: string
+        default: "."
+      iac-dir:
+        description: "Directorio IaC para Checkov ('' = omitir)"
+        type: string
+        default: ""
+      ai-triage:
+        description: "Habilitar el agente de triage en PRs (requiere WIF configurado)"
+        type: boolean
+        default: true
+      # Workload Identity Federation (OIDC de GitHub → token efimero de Anthropic).
+      # Sin API keys de larga duracion. Estos IDs no son secretos.
+      anthropic-organization-id:
+        description: "UUID de la organizacion de Anthropic ('' = triage omitido)"
+        type: string
+        default: ""
+      anthropic-federation-rule-id:
+        description: "fdrl_... de la regla que acepta el sub repo:<owner>/<repo>:pull_request"
+        type: string
+        default: ""
+      anthropic-service-account-id:
+        description: "svac_... (opcional; si se pone, debe ser la cuenta de la regla)"
+        type: string
+        default: ""
+      anthropic-workspace-id:
+        description: "wrkspc_... (solo si la regla cubre varios workspaces)"
+        type: string
+        default: ""
+    outputs:
+      gate:
+        description: "passed | failed"
+        value: ${{ jobs.security-gate.outputs.gate }}
+
+# Minimo privilegio por defecto; cada job pide solo lo que necesita.
+permissions:
+  contents: read
+
+env:
+  IS_PR: ${{ github.event_name == 'pull_request' }}
+  BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  secrets:
+    name: "🔑 Secrets"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks (version + checksum fijos)
+        env:
+          GL_VERSION: "8.30.1"
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GL_VERSION}"
+          curl -sSfL -o gl.tgz "${base}/gitleaks_${GL_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o gl.sha "${base}/gitleaks_${GL_VERSION}_checksums.txt"
+          grep "linux_x64.tar.gz" gl.sha | awk '{print $1"  gl.tgz"}' | sha256sum -c -
+          tar -xzf gl.tgz gitleaks && sudo mv gitleaks /usr/local/bin/
+
+      - name: Gitleaks — commits del PR (gate) / historial (reporte)
+        run: |
+          if [ "$IS_PR" = "true" ]; then
+            RANGE="${BASE_SHA}..${{ github.event.pull_request.head.sha }}"
+            EXIT=1
+          else
+            RANGE="--all"
+            EXIT=0
+          fi
+          gitleaks git --config .gitleaks.toml --log-opts="$RANGE" --redact \
+            --report-format sarif --report-path gitleaks.sarif --exit-code "$EXIT"
+
+      - name: TruffleHog — solo secretos verificados (gate)
+        uses: trufflesecurity/trufflehog@3bd2b5887eb0efb8fa18bfd1d296032924e4ffdc # v3.99.9
+        with:
+          extra_args: --only-verified
+          version: "3.99.9" # sin esto la action baja la imagen :latest
+
+      - name: Upload SARIF
+        if: always() && hashFiles('gitleaks.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sarif-secrets
+          path: gitleaks.sarif
+          if-no-files-found: ignore
+
+  # ───────────────────────────────────────────────────────────────────────────
+  sast:
+    name: "🔍 SAST"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
+        run: |
+          pin() { grep -E "^$1(\[[^]]*\])?==" .github/ci/requirements-ci.txt; }
+          pipx install "$(pin semgrep)"
+          pipx install "$(pin bandit)"
+
+      - name: Semgrep — reporte completo (SARIF → Code Scanning)
+        run: |
+          CONFIGS=(--config p/python --config p/secrets)
+          [ -d rules ] && CONFIGS+=(--config rules/)
+          semgrep scan "${CONFIGS[@]}" --metrics=off --sarif -o semgrep.sarif || true
+          # `|| true` SOLO en el reporte: el gate es el paso siguiente.
+
+      - name: Semgrep — gate diff-aware (solo hallazgos ERROR nuevos)
+        if: env.IS_PR == 'true'
+        run: |
+          CONFIGS=(--config p/python)
+          [ -d rules ] && CONFIGS+=(--config rules/)
+          semgrep scan "${CONFIGS[@]}" --metrics=off --severity ERROR \
+            --baseline-commit "$BASE_SHA" --error
+
+      - name: Bandit — reporte (SARIF)
+        run: bandit -r . -x ./tests,./rules,./.venv -f sarif -o bandit.sarif --exit-zero
+
+      - name: Upload SARIF (Semgrep)
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+      - name: Upload SARIF (Bandit)
+        if: always() && hashFiles('bandit.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: bandit.sarif
+          category: bandit
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sarif-sast
+          path: "*.sarif"
+          if-no-files-found: ignore
+
+  # ───────────────────────────────────────────────────────────────────────────
+  dependencies:
+    name: "📦 Dependencies"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
+        run: |
+          pin() { grep -E "^$1(\[[^]]*\])?==" .github/ci/requirements-ci.txt; }
+          pipx install "$(pin pip-audit)"
+          pip install "$(pin pip-licenses)"
+      - name: pip-audit diff-aware (gate en PR, reporte en push)
+        env:
+          REQS: ${{ inputs.requirements }}
+        run: |
+          read -ra FILES <<< "$REQS"
+          if [ "$IS_PR" = "true" ]; then
+            python scripts/dep_gate.py --base "$BASE_SHA" "${FILES[@]}"
+          else
+            python scripts/dep_gate.py "${FILES[@]}"
+          fi
+      - name: Licencias (reporte)
+        env:
+          REQS: ${{ inputs.requirements }}
+        run: |
+          read -ra FILES <<< "$REQS"
+          for r in "${FILES[@]}"; do [ -f "$r" ] && pip install -q -r "$r" || true; done
+          {
+            echo "## 📄 Licencias"; echo '```'
+            pip-licenses --format=plain --order=license
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  container:
+    name: "🐳 Container"
+    if: inputs.image-dockerfile != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build (sin push)
+        run: docker build -t platform-scan:${{ github.sha }} -f "${{ inputs.image-dockerfile }}" "${{ inputs.image-context }}"
+
+      - name: Trivy — reporte HIGH/CRITICAL (SARIF)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: platform-scan:${{ github.sha }}
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+
+      - name: Trivy — gate (CRITICAL con fix disponible)
+        if: env.IS_PR == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: platform-scan:${{ github.sha }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-setup-trivy: true
+
+      - name: Hadolint — todos los Dockerfiles (SARIF)
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: "Dockerfile"
+          recursive: true
+          format: sarif
+          output-file: hadolint.sarif
+          no-fail: true
+
+      - name: Upload SARIF (Trivy)
+        if: always() && hashFiles('trivy.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+      - name: Upload SARIF (Hadolint)
+        if: always() && hashFiles('hadolint.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sarif-container
+          path: "*.sarif"
+          if-no-files-found: ignore
+
+  # ───────────────────────────────────────────────────────────────────────────
+  iac:
+    name: "🏗️ IaC"
+    if: inputs.iac-dir != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
+        run: |
+          pin() { grep -E "^$1(\[[^]]*\])?==" .github/ci/requirements-ci.txt; }
+          pipx install "$(pin checkov)"
+      - name: Checkov (reporte; siguiente paso = gate con --baseline)
+        run: |
+          checkov -d "${{ inputs.iac-dir }}" --framework terraform \
+            -o sarif --output-file-path checkov-out --soft-fail
+          mv checkov-out/results_sarif.sarif checkov.sarif
+      - name: Upload SARIF (Checkov)
+        if: always() && hashFiles('checkov.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sarif-iac
+          path: checkov.sarif
+          if-no-files-found: ignore
+
+  # ───────────────────────────────────────────────────────────────────────────
+  platform-integrity:
+    name: "🧬 Rules + Tests + Pipeline integrity"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
+        run: |
+          pin() { grep -E "^$1(\[[^]]*\])?==" .github/ci/requirements-ci.txt; }
+          pipx install "$(pin semgrep)"
+          pip install "$(pin pytest)"
+
+      - name: Las reglas propias tienen tests y pasan (Codify)
+        if: hashFiles('rules/**') != ''
+        run: semgrep --test --metrics=off rules/
+
+      - name: El pipeline se audita a si mismo (actions por SHA, sin pwn-request)
+        if: hashFiles('rules/github-actions/**') != ''
+        run: |
+          semgrep scan --config rules/github-actions/ --metrics=off --error \
+            --include '.github/workflows/*' .github/workflows/
+
+      - name: Tests de seguridad (pytest)
+        if: hashFiles('tests/**') != ''
+        run: pytest tests/ -q --junitxml=test-results.xml
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Capa AI — asesora, NO bloqueante. Solo PRs del mismo repo (los forks no
+  # reciben token OIDC y su contenido es el de mayor riesgo de prompt injection).
+  # Auth: Workload Identity Federation. GitHub firma un JWT de ~5 min para este
+  # job; Anthropic lo valida contra la regla (sub + aud + repo + workflow) y
+  # devuelve un token efimero de la service account. No hay secreto que robar.
+  ai-triage:
+    name: "🤖 AI triage (advisory)"
+    needs: [secrets, sast, container, iac]
+    if: >-
+      always() && inputs.ai-triage &&
+      inputs.anthropic-federation-rule-id != '' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true # asesor por diseno: nunca rompe el pipeline
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write # solo para pedir el JWT OIDC de GitHub
+    env:
+      ANTHROPIC_ORGANIZATION_ID: ${{ inputs.anthropic-organization-id }}
+      ANTHROPIC_FEDERATION_RULE_ID: ${{ inputs.anthropic-federation-rule-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install "$(grep -E '^anthropic==' .github/ci/requirements-ci.txt)"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: sarif-*
+          path: sarif
+          merge-multiple: true
+      - name: Variables WIF opcionales (solo si vienen; un "" vacio ocupa su lugar en la cadena de credenciales)
+        env:
+          SVAC: ${{ inputs.anthropic-service-account-id }}
+          WRKSPC: ${{ inputs.anthropic-workspace-id }}
+        run: |
+          echo "ANTHROPIC_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/gha-jwt" >> "$GITHUB_ENV"
+          [ -n "$SVAC" ] && echo "ANTHROPIC_SERVICE_ACCOUNT_ID=$SVAC" >> "$GITHUB_ENV"
+          [ -n "$WRKSPC" ] && echo "ANTHROPIC_WORKSPACE_ID=$WRKSPC" >> "$GITHUB_ENV"
+          true
+      - name: Triage de hallazgos del PR
+        # El script pide un JWT fresco a GitHub (aud=https://api.anthropic.com)
+        # justo antes de llamar al API: los JWT de GitHub traen jti y no se reusan.
+        run: python scripts/ai_triage.py --sarif-dir sarif --base "$BASE_SHA" --out triage.md
+      - name: Comentar en el PR (actualiza el comentario previo)
+        if: hashFiles('triage.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file triage.md --edit-last --create-if-none
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Un solo check requerido para branch protection.
+  security-gate:
+    name: "🚦 Security Gate"
+    needs: [secrets, sast, dependencies, container, iac, platform-integrity]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      gate: ${{ steps.eval.outputs.gate }}
+    steps:
+      - id: eval
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          {
+            echo "## 🚦 Security Gate"
+            echo "| Control | Resultado |"
+            echo "|---|---|"
+            echo "$RESULTS" | jq -r 'to_entries[] | "| \(.key) | `\(.value.result)` |"'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # skipped = control no aplica (p. ej. sin Dockerfile); failure/cancelled = bloquea
+          if echo "$RESULTS" | jq -e '[.[] | .result] | any(. == "failure" or . == "cancelled")' >/dev/null; then
+            echo "gate=failed" >> "$GITHUB_OUTPUT"
+            echo "> 🚫 **Bloqueado** por la politica de seguridad." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "gate=passed" >> "$GITHUB_OUTPUT"
+          echo "> ✅ Politica cumplida." >> "$GITHUB_STEP_SUMMARY"

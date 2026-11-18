@@ -1,0 +1,112 @@
+# =============================================================================
+# Taskflow: auditoria de rutas criticas con LLM (fase FIND)
+# Inspirado en la metodologia del GitHub Security Lab (Taskflow Agent):
+# el valor esta en la secuencia de prompts, no en el modelo. Cambias de modelo
+# sin tocar la metodologia.
+#
+# Flujo:  map -> hunt -> refute -> extract
+# Salida: candidatos SIN validar -> issue con label `needs-validation` (HITL).
+#         Ningun hallazgo de este flujo bloquea un merge hasta que un humano lo
+#         valida y se CODIFICA como regla en rules/ (con su fixture de test).
+# =============================================================================
+name: audit-critical-paths
+model: claude-opus-5-5
+effort: high
+
+# Rutas criticas a auditar. En Wenia serian: custodia, firma de transacciones,
+# ledger, auth, limites/retiros. Aqui: la app del workshop y la infra.
+targets:
+  - vulnerable_app/app_secure.py
+  - docker/app/Dockerfile
+  - docker-compose.yml
+  - configs/nginx/nginx-mtls.conf
+
+tasks:
+  - id: map
+    prompt: |
+      Construye el modelo de amenazas de estos archivos. Lista las entradas
+      externas (endpoints, parametros, headers, archivos, variables de entorno),
+      los sinks sensibles y las fronteras de confianza. No reportes bugs todavia.
+    schema:
+      type: object
+      properties:
+        entry_points: {type: array, items: {type: string}}
+        sinks: {type: array, items: {type: string}}
+        trust_boundaries: {type: array, items: {type: string}}
+      required: [entry_points, sinks, trust_boundaries]
+      additionalProperties: false
+
+  - id: hunt
+    prompt: |
+      Con el modelo de amenazas de la tarea `map`, busca vulnerabilidades que
+      las reglas estaticas actuales probablemente NO detectan: logica de
+      negocio, validaciones incompletas o evadibles, TOCTOU, configuraciones
+      inseguras combinadas entre archivos. Para cada candidato cita archivo y
+      lineas exactas y describe el camino desde la entrada hasta el sink.
+    schema:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            type: object
+            properties:
+              title: {type: string}
+              file: {type: string}
+              lines: {type: string}
+              path_to_sink: {type: string}
+              severity: {type: string, enum: [low, medium, high, critical]}
+            required: [title, file, lines, path_to_sink, severity]
+            additionalProperties: false
+      required: [candidates]
+      additionalProperties: false
+
+  - id: refute
+    prompt: |
+      Actua como revisor adversarial. Para cada candidato de `hunt`, intenta
+      REFUTARLO con el codigo que tienes (un guard previo, una validacion, una
+      config que lo impide). Conserva solo los que sobreviven y explica por que
+      no pudiste refutarlos. Se estricto: es mejor descartar que inundar de ruido.
+    schema:
+      type: object
+      properties:
+        survivors:
+          type: array
+          items:
+            type: object
+            properties:
+              title: {type: string}
+              file: {type: string}
+              lines: {type: string}
+              severity: {type: string, enum: [low, medium, high, critical]}
+              why_not_refuted: {type: string}
+              poc_idea: {type: string}
+            required: [title, file, lines, severity, why_not_refuted, poc_idea]
+            additionalProperties: false
+        discarded: {type: array, items: {type: string}}
+      required: [survivors, discarded]
+      additionalProperties: false
+
+  - id: extract
+    prompt: |
+      Para cada sobreviviente de `refute`, extrae el PATRON generalizable y
+      escribe un borrador de regla Semgrep (YAML) que detecte variantes en
+      otros repos, mas un ejemplo `# ruleid:` y un `# ok:` para su fixture de
+      test. Si el patron no es codificable de forma determinista, dilo.
+    schema:
+      type: object
+      properties:
+        patterns:
+          type: array
+          items:
+            type: object
+            properties:
+              title: {type: string}
+              pattern_description: {type: string}
+              codifiable: {type: boolean}
+              semgrep_rule_draft: {type: string}
+              fixture_draft: {type: string}
+            required: [title, pattern_description, codifiable, semgrep_rule_draft, fixture_draft]
+            additionalProperties: false
+      required: [patterns]
+      additionalProperties: false

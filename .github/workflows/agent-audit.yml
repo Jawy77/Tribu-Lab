@@ -1,0 +1,71 @@
+# =============================================================================
+# 🔎 Agent audit — fase FIND (semanal + manual)
+# Un agente LLM recorre las rutas criticas con un taskflow (map → hunt →
+# refute → extract) y abre un issue `needs-validation` con candidatos.
+# HITL: nada bloquea hasta que un humano valida (PoC) y CODIFICA la regla.
+# =============================================================================
+name: "🔎 Agent audit (Find)"
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # lunes 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      taskflow:
+        description: "Taskflow a ejecutar"
+        default: "agents/taskflows/audit-critical-paths.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Solo desde main: la regla WIF de esta auditoria acepta unicamente
+    # sub=repo:<owner>/<repo>:ref:refs/heads/main + este archivo de workflow.
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      issues: write
+      id-token: write # OIDC → Workload Identity Federation con Anthropic
+    env:
+      TASKFLOW: ${{ inputs.taskflow || 'agents/taskflows/audit-critical-paths.yml' }}
+      ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_RULE_ID_AGENT_AUDIT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install anthropic==2.9.0 pyyaml==6.0.3
+      - name: Variables WIF (no exportar vacias)
+        env:
+          SVAC: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+        run: |
+          echo "ANTHROPIC_IDENTITY_TOKEN_FILE=$RUNNER_TEMP/gha-jwt" >> "$GITHUB_ENV"
+          [ -n "$SVAC" ] && echo "ANTHROPIC_SERVICE_ACCOUNT_ID=$SVAC" >> "$GITHUB_ENV"
+          true
+      - name: Ejecutar taskflow
+        run: |
+          if [ -z "$ANTHROPIC_FEDERATION_RULE_ID" ] || [ -z "$ANTHROPIC_ORGANIZATION_ID" ]; then
+            echo "WIF sin configurar (vars ANTHROPIC_*): auditoria omitida." >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          python scripts/agent_audit.py "$TASKFLOW" --out audit.md --json-out audit.json
+          cat audit.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Abrir issue para validacion humana
+        if: hashFiles('audit.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create needs-validation --color FBCA04 --description "Hallazgo de agente sin validar" 2>/dev/null || true
+          gh issue create --title "Agent audit $(date -u +%F): candidatos para validar" \
+            --label needs-validation --body-file audit.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: agent-audit
+          path: audit.*
+          if-no-files-found: ignore

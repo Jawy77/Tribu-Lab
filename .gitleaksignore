@@ -1,0 +1,5 @@
+# Falsos positivos triageados (fingerprint exacto, no por carpeta).
+# Fixture de eval del skill docker-hardening-auditor (token falso a proposito)
+skills/docker-hardening-auditor/evals/evals.json:generic-api-key:34
+# status.json cita el hallazgo anterior como texto
+monitoring/status.json:generic-api-key:24

@@ -1,0 +1,19 @@
+# Dependabot: paga la deuda que el gate diff-aware deja pasar.
+# cooldown = no adoptar versiones recien publicadas (ventana contra paquetes
+# comprometidos tipo npm 2025: la mayoria se detectan en horas/dias).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: pip
+    directories: ["/", "/vulnerable_app", "/docker/openclaw", "/.github/ci"]
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
+  - package-ecosystem: docker
+    directories: ["/docker/app", "/docker/openclaw"]
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }

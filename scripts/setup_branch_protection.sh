@@ -46,12 +46,7 @@ gh api -X PUT "repos/$REPO/branches/main/protection" \
   "required_status_checks": {
     "strict": true,
     "contexts": [
-      "🔑 Checks 1-2 — Secret Scanning",
-      "🔍 Checks 3-5 — SAST + Dependencies",
-      "🐳 Checks 6-7 — Container Security",
-      "🏗️ Checks 8-9 — IaC Security",
-      "📄 Check 10 — License Audit",
-      "🧪 Check 11 — Security Tests"
+      "platform / 🚦 Security Gate"
     ]
   },
   "enforce_admins": false,
@@ -77,9 +72,7 @@ gh api -X PUT "repos/$REPO/branches/develop/protection" \
   "required_status_checks": {
     "strict": false,
     "contexts": [
-      "🔑 Checks 1-2 — Secret Scanning",
-      "🔍 Checks 3-5 — SAST + Dependencies",
-      "🧪 Check 11 — Security Tests"
+      "platform / 🚦 Security Gate"
     ]
   },
   "enforce_admins": false,
