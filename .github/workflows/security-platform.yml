@@ -1,9 +1,14 @@
 # =============================================================================
-# 🛡️ Security Platform — reusable workflow (el "paved road")
-# Tribu | Hacklab Bogota | Ethereum Bogota | Mantishield
+# 🛡️ Auditgate — Security Platform (reusable workflow, el "paved road")
+# https://github.com/Jawy77/auditgate
 #
-# Cualquier repo lo consume con ~10 lineas (ver devsecops-pipeline.yml).
-# El equipo de producto no configura herramientas: hereda la plataforma.
+# Cualquier repo lo consume con `auditgate init` o con ~15 lineas a mano:
+#
+#   jobs:
+#     auditgate:
+#       uses: Jawy77/auditgate/.github/workflows/security-platform.yml@<sha>
+#       with:
+#         platform-ref: <sha>          # el mismo SHA del `uses:`
 #
 # POLITICA (determinista, auditable):
 #   BLOQUEA en PR  → secretos nuevos · SAST ERROR nuevos (diff-aware) ·
@@ -11,21 +16,31 @@
 #                    reglas propias sin tests · actions sin pin por SHA ·
 #                    tests de seguridad rotos
 #   REPORTA        → todo lo demas va a Code Scanning (SARIF) y aparece en el PR
-#   ASESORA (AI)   → agente de triage comenta veredicto/fix; nunca bloquea
+#   ASESORA (AI)   → agente de triage comenta veredicto/fix; nunca bloquea.
+#                    Modelo a eleccion (Claude, Grok, OpenAI o API compatible).
 #
-# La deuda previa NO bloquea a nadie (baseline); lo nuevo SI. Asi un gate
-# estricto es adoptable en repos con historia.
+# La deuda previa NO bloquea a nadie (baseline); lo nuevo SI.
 # =============================================================================
-name: "Security Platform (reusable)"
+name: "Auditgate Security Platform (reusable)"
 
 on:
   workflow_call:
     inputs:
+      # ── De donde salen las herramientas de Auditgate ─────────────────────
+      platform-repository:
+        description: "Repo de Auditgate (forks pueden apuntar al suyo)"
+        type: string
+        default: "Jawy77/auditgate"
+      platform-ref:
+        description: "SHA (o tag) de Auditgate; debe coincidir con el @ref del `uses:`"
+        type: string
+        default: "main"
+      # ── Que escanear ─────────────────────────────────────────────────────
       python-version:
         type: string
         default: "3.12"
       requirements:
-        description: "requirements*.txt a auditar (separados por espacio)"
+        description: "requirements*.txt a auditar (separados por espacio; '' = omitir)"
         type: string
         default: "requirements.txt"
       image-dockerfile:
@@ -36,31 +51,56 @@ on:
         type: string
         default: "."
       iac-dir:
-        description: "Directorio IaC para Checkov ('' = omitir)"
+        description: "Directorio Terraform para Checkov ('' = omitir)"
         type: string
         default: ""
-      ai-triage:
-        description: "Habilitar el agente de triage en PRs (requiere WIF configurado)"
+      tests-path:
+        description: "Tests de seguridad propios a correr con pytest ('' = omitir)"
+        type: string
+        default: ""
+      enforce-pinned-actions:
+        description: "Bloquear si los workflows del repo usan actions sin fijar por SHA (false = solo reportar mientras migras)"
         type: boolean
         default: true
-      # Workload Identity Federation (OIDC de GitHub → token efimero de Anthropic).
-      # Sin API keys de larga duracion. Estos IDs no son secretos.
+      # ── Agente de triage (asesor, nunca bloquea) ──────────────────────────
+      ai-triage:
+        type: boolean
+        default: true
+      llm-provider:
+        description: "anthropic | xai | openai | openai-compatible ('' = anthropic)"
+        type: string
+        default: ""
+      llm-model:
+        description: "Modelo del proveedor ('' = default de Claude; obligatorio en los demas)"
+        type: string
+        default: ""
+      llm-base-url:
+        description: "Endpoint propio para openai-compatible (Ollama, OpenRouter, vLLM...)"
+        type: string
+        default: ""
+      llm-environment:
+        description: "Environment de GitHub que guarda AUDITGATE_LLM_API_KEY (el vault)"
+        type: string
+        default: "auditgate"
+      # ── Claude sin llave: Workload Identity Federation (opcional) ────────
       anthropic-organization-id:
-        description: "UUID de la organizacion de Anthropic ('' = triage omitido)"
         type: string
         default: ""
       anthropic-federation-rule-id:
-        description: "fdrl_... de la regla que acepta el sub repo:<owner>/<repo>:pull_request"
         type: string
         default: ""
       anthropic-service-account-id:
-        description: "svac_... (opcional; si se pone, debe ser la cuenta de la regla)"
         type: string
         default: ""
       anthropic-workspace-id:
-        description: "wrkspc_... (solo si la regla cubre varios workspaces)"
         type: string
         default: ""
+    secrets:
+      AUDITGATE_LLM_API_KEY:
+        description: >-
+          Alternativa al Environment: pasar la llave desde el caller. Si el
+          Environment `llm-environment` tiene el secreto, ese tiene prioridad.
+        required: false
     outputs:
       gate:
         description: "passed | failed"
@@ -73,6 +113,9 @@ permissions:
 env:
   IS_PR: ${{ github.event_name == 'pull_request' }}
   BASE_SHA: ${{ github.event.pull_request.base.sha }}
+  PLATFORM_REPO: ${{ inputs.platform-repository }}
+  # Herramientas de Auditgate (scripts, reglas, versiones) — fuera del codigo escaneado.
+  AG: .auditgate
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
@@ -88,19 +131,33 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Auditgate (herramientas, version fijada)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ github.repository == inputs.platform-repository && github.sha || inputs.platform-ref }}
+          path: .auditgate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts
+            rules
+            .github/ci
+      - run: echo ".auditgate/" >> .git/info/exclude
 
       - name: Install gitleaks (version + checksum fijos)
         env:
           GL_VERSION: "8.30.1"
         run: |
           base="https://github.com/gitleaks/gitleaks/releases/download/v${GL_VERSION}"
-          curl -sSfL -o gl.tgz "${base}/gitleaks_${GL_VERSION}_linux_x64.tar.gz"
-          curl -sSfL -o gl.sha "${base}/gitleaks_${GL_VERSION}_checksums.txt"
-          grep "linux_x64.tar.gz" gl.sha | awk '{print $1"  gl.tgz"}' | sha256sum -c -
-          tar -xzf gl.tgz gitleaks && sudo mv gitleaks /usr/local/bin/
+          curl -sSfL -o "$RUNNER_TEMP/gl.tgz" "${base}/gitleaks_${GL_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/gl.sha" "${base}/gitleaks_${GL_VERSION}_checksums.txt"
+          (cd "$RUNNER_TEMP" && grep "linux_x64.tar.gz" gl.sha | awk '{print $1"  gl.tgz"}' | sha256sum -c -)
+          tar -xzf "$RUNNER_TEMP/gl.tgz" -C "$RUNNER_TEMP" gitleaks && sudo mv "$RUNNER_TEMP/gitleaks" /usr/local/bin/
 
       - name: Gitleaks — commits del PR (gate) / historial (reporte)
         run: |
+          CFG=.gitleaks.toml
+          [ -f "$CFG" ] || CFG="$AG/.gitleaks.toml"
           if [ "$IS_PR" = "true" ]; then
             RANGE="${BASE_SHA}..${{ github.event.pull_request.head.sha }}"
             EXIT=1
@@ -108,7 +165,7 @@ jobs:
             RANGE="--all"
             EXIT=0
           fi
-          gitleaks git --config .gitleaks.toml --log-opts="$RANGE" --redact \
+          gitleaks git --config "$CFG" --log-opts="$RANGE" --redact \
             --report-format sarif --report-path gitleaks.sarif --exit-code "$EXIT"
 
       - name: TruffleHog — solo secretos verificados (gate)
@@ -144,32 +201,51 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Auditgate (herramientas, version fijada)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ github.repository == inputs.platform-repository && github.sha || inputs.platform-ref }}
+          path: .auditgate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts
+            rules
+            .github/ci
+      - run: echo ".auditgate/" >> .git/info/exclude
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
       - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
         run: |
-          pin() { grep -E "^$1(\[[^]]*\])?==" .github/ci/requirements-ci.txt; }
+          pin() { grep -E "^$1(\[[^]]*\])?==" "$AG/.github/ci/requirements-ci.txt"; }
           pipx install "$(pin semgrep)"
           pipx install "$(pin bandit)"
 
+      - name: Reglas a aplicar (Auditgate + las propias del repo)
+        run: |
+          CONFIGS="--config p/python --config $AG/rules/"
+          # Reglas codificadas por el propio equipo (Find → Extract → Codify en su repo)
+          if [ -d rules ] && [ "$GITHUB_REPOSITORY" != "$PLATFORM_REPO" ]; then
+            CONFIGS="$CONFIGS --config rules/"
+          fi
+          echo "SEMGREP_CONFIGS=$CONFIGS" >> "$GITHUB_ENV"
+
       - name: Semgrep — reporte completo (SARIF → Code Scanning)
         run: |
-          CONFIGS=(--config p/python --config p/secrets)
-          [ -d rules ] && CONFIGS+=(--config rules/)
-          semgrep scan "${CONFIGS[@]}" --metrics=off --sarif -o semgrep.sarif || true
+          read -ra CONFIGS <<< "$SEMGREP_CONFIGS --config p/secrets"
+          semgrep scan "${CONFIGS[@]}" --exclude "$AG" --metrics=off --sarif -o semgrep.sarif || true
           # `|| true` SOLO en el reporte: el gate es el paso siguiente.
 
       - name: Semgrep — gate diff-aware (solo hallazgos ERROR nuevos)
         if: env.IS_PR == 'true'
         run: |
-          CONFIGS=(--config p/python)
-          [ -d rules ] && CONFIGS+=(--config rules/)
-          semgrep scan "${CONFIGS[@]}" --metrics=off --severity ERROR \
+          read -ra CONFIGS <<< "$SEMGREP_CONFIGS"
+          semgrep scan "${CONFIGS[@]}" --exclude "$AG" --metrics=off --severity ERROR \
             --baseline-commit "$BASE_SHA" --error
 
       - name: Bandit — reporte (SARIF)
-        run: bandit -r . -x ./tests,./rules,./.venv -f sarif -o bandit.sarif --exit-zero
+        run: bandit -r . -x "./tests,./rules,./.venv,./$AG" -f sarif -o bandit.sarif --exit-zero
 
       - name: Upload SARIF (Semgrep)
         if: always() && hashFiles('semgrep.sarif') != ''
@@ -194,6 +270,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   dependencies:
     name: "📦 Dependencies"
+    if: inputs.requirements != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -203,12 +280,23 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Auditgate (herramientas, version fijada)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ github.repository == inputs.platform-repository && github.sha || inputs.platform-ref }}
+          path: .auditgate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts
+            .github/ci
+      - run: echo ".auditgate/" >> .git/info/exclude
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
       - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
         run: |
-          pin() { grep -E "^$1(\[[^]]*\])?==" .github/ci/requirements-ci.txt; }
+          pin() { grep -E "^$1(\[[^]]*\])?==" "$AG/.github/ci/requirements-ci.txt"; }
           pipx install "$(pin pip-audit)"
           pip install "$(pin pip-licenses)"
       - name: pip-audit diff-aware (gate en PR, reporte en push)
@@ -217,9 +305,9 @@ jobs:
         run: |
           read -ra FILES <<< "$REQS"
           if [ "$IS_PR" = "true" ]; then
-            python scripts/dep_gate.py --base "$BASE_SHA" "${FILES[@]}"
+            python "$AG/scripts/dep_gate.py" --base "$BASE_SHA" "${FILES[@]}"
           else
-            python scripts/dep_gate.py "${FILES[@]}"
+            python "$AG/scripts/dep_gate.py" "${FILES[@]}"
           fi
       - name: Licencias (reporte)
         env:
@@ -310,12 +398,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Auditgate (herramientas, version fijada)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ github.repository == inputs.platform-repository && github.sha || inputs.platform-ref }}
+          path: .auditgate
+          persist-credentials: false
+          sparse-checkout: |
+            .github/ci
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
       - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
         run: |
-          pin() { grep -E "^$1(\[[^]]*\])?==" .github/ci/requirements-ci.txt; }
+          pin() { grep -E "^$1(\[[^]]*\])?==" "$AG/.github/ci/requirements-ci.txt"; }
           pipx install "$(pin checkov)"
       - name: Checkov (reporte; siguiente paso = gate con --baseline)
         run: |
@@ -346,51 +443,71 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Auditgate (herramientas, version fijada)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ github.repository == inputs.platform-repository && github.sha || inputs.platform-ref }}
+          path: .auditgate
+          persist-credentials: false
+          sparse-checkout: |
+            rules
+            .github/ci
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
       - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
         run: |
-          pin() { grep -E "^$1(\[[^]]*\])?==" .github/ci/requirements-ci.txt; }
+          pin() { grep -E "^$1(\[[^]]*\])?==" "$AG/.github/ci/requirements-ci.txt"; }
           pipx install "$(pin semgrep)"
-          pip install "$(pin pytest)"
+          pip install "$(pin pytest)" "$(pin jsonschema)" "$(pin anthropic)" "$(pin openai)" "$(pin pyyaml)"
 
-      - name: Las reglas propias tienen tests y pasan (Codify)
+      - name: Las reglas del repo tienen tests y pasan (Codify)
         if: hashFiles('rules/**') != ''
         run: semgrep --test --metrics=off rules/
 
       - name: El pipeline se audita a si mismo (actions por SHA, sin pwn-request)
-        if: hashFiles('rules/github-actions/**') != ''
+        if: hashFiles('.github/workflows/**') != ''
+        env:
+          ENFORCE: ${{ inputs.enforce-pinned-actions }}
         run: |
-          semgrep scan --config rules/github-actions/ --metrics=off --error \
-            --include '.github/workflows/*' .github/workflows/
+          FLAGS=(--config "$AG/rules/github-actions/" --metrics=off --include '.github/workflows/*')
+          [ "$ENFORCE" = "true" ] && FLAGS+=(--error)
+          semgrep scan "${FLAGS[@]}" .github/workflows/
 
       - name: Tests de seguridad (pytest)
-        if: hashFiles('tests/**') != ''
-        run: pytest tests/ -q --junitxml=test-results.xml
+        if: inputs.tests-path != ''
+        env:
+          TESTS: ${{ inputs.tests-path }}
+        run: pytest "$TESTS" -q --junitxml=test-results.xml
 
   # ───────────────────────────────────────────────────────────────────────────
   # Capa AI — asesora, NO bloqueante. Solo PRs del mismo repo (los forks no
-  # reciben token OIDC y su contenido es el de mayor riesgo de prompt injection).
-  # Auth: Workload Identity Federation. GitHub firma un JWT de ~5 min para este
-  # job; Anthropic lo valida contra la regla (sub + aud + repo + workflow) y
-  # devuelve un token efimero de la service account. No hay secreto que robar.
+  # reciben secretos ni token OIDC, y su contenido es el de mayor riesgo de
+  # prompt injection).
+  #
+  # El VAULT: el Environment `llm-environment` (por defecto `auditgate`). Su
+  # secreto AUDITGATE_LLM_API_KEY esta cifrado por GitHub y SOLO lo recibe este
+  # job (los escaneres nunca lo ven). Con Claude se puede no tener llave: WIF.
   ai-triage:
     name: "🤖 AI triage (advisory)"
     needs: [secrets, sast, container, iac]
     if: >-
       always() && inputs.ai-triage &&
-      inputs.anthropic-federation-rule-id != '' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true # asesor por diseno: nunca rompe el pipeline
+    environment: ${{ inputs.llm-environment }}
     permissions:
       contents: read
       pull-requests: write
-      id-token: write # solo para pedir el JWT OIDC de GitHub
+      id-token: write # solo para WIF con Claude (sin llave)
     env:
+      AUDITGATE_LLM_PROVIDER: ${{ inputs.llm-provider }}
+      AUDITGATE_LLM_MODEL: ${{ inputs.llm-model }}
+      AUDITGATE_LLM_BASE_URL: ${{ inputs.llm-base-url }}
       ANTHROPIC_ORGANIZATION_ID: ${{ inputs.anthropic-organization-id }}
       ANTHROPIC_FEDERATION_RULE_ID: ${{ inputs.anthropic-federation-rule-id }}
     steps:
@@ -398,10 +515,23 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Auditgate (herramientas, version fijada)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ github.repository == inputs.platform-repository && github.sha || inputs.platform-ref }}
+          path: .auditgate
+          persist-credentials: false
+          sparse-checkout: |
+            scripts
+            .github/ci
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
-      - run: pip install "$(grep -E '^anthropic==' .github/ci/requirements-ci.txt)"
+      - name: SDKs de modelos (versiones fijadas)
+        run: |
+          pin() { grep -E "^$1(\[[^]]*\])?==" "$AG/.github/ci/requirements-ci.txt"; }
+          pip install "$(pin anthropic)" "$(pin openai)" "$(pin jsonschema)"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: sarif-*
@@ -417,9 +547,10 @@ jobs:
           [ -n "$WRKSPC" ] && echo "ANTHROPIC_WORKSPACE_ID=$WRKSPC" >> "$GITHUB_ENV"
           true
       - name: Triage de hallazgos del PR
-        # El script pide un JWT fresco a GitHub (aud=https://api.anthropic.com)
-        # justo antes de llamar al API: los JWT de GitHub traen jti y no se reusan.
-        run: python scripts/ai_triage.py --sarif-dir sarif --base "$BASE_SHA" --out triage.md
+        env:
+          # La llave solo existe en este paso (GitHub la enmascara en los logs).
+          AUDITGATE_LLM_API_KEY: ${{ secrets.AUDITGATE_LLM_API_KEY }}
+        run: python "$AG/scripts/ai_triage.py" --sarif-dir sarif --base "$BASE_SHA" --out triage.md
       - name: Comentar en el PR (actualiza el comentario previo)
         if: hashFiles('triage.md') != ''
         env:

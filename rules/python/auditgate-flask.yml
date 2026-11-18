@@ -105,6 +105,8 @@ rules:
       - metavariable-regex:
           metavariable: $NAME
           regex: (?i)^.*(secret|passw(or)?d|pwd|api_?key|token|private_?key).*$
+      # Excluye valores que son NOMBRES de variables (SECRET_NAME = "MY_API_KEY"):
+      # falso positivo encontrado por el propio gate en cli/auditgate_cli/main.py.
       - metavariable-regex:
           metavariable: $VALUE
-          regex: ^.{6,}$
+          regex: ^(?![A-Z][A-Z0-9_]*$).{6,}$

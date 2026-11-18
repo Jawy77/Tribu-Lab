@@ -25,12 +25,17 @@ jobs:
     # Solo desde main: la regla WIF de esta auditoria acepta unicamente
     # sub=repo:<owner>/<repo>:ref:refs/heads/main + este archivo de workflow.
     if: github.ref == 'refs/heads/main'
+    # Vault: la llave del modelo vive en el Environment `auditgate`.
+    environment: auditgate
     permissions:
       contents: read
       issues: write
-      id-token: write # OIDC → Workload Identity Federation con Anthropic
+      id-token: write # solo para WIF con Claude (sin llave)
     env:
       TASKFLOW: ${{ inputs.taskflow || 'agents/taskflows/audit-critical-paths.yml' }}
+      AUDITGATE_LLM_PROVIDER: ${{ vars.AUDITGATE_LLM_PROVIDER }}
+      AUDITGATE_LLM_MODEL: ${{ vars.AUDITGATE_LLM_MODEL }}
+      AUDITGATE_LLM_BASE_URL: ${{ vars.AUDITGATE_LLM_BASE_URL }}
       ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
       ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_RULE_ID_AGENT_AUDIT }}
     steps:
@@ -40,7 +45,10 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - run: pip install anthropic==2.9.0 pyyaml==6.0.3
+      - name: SDKs de modelos (versiones fijadas)
+        run: |
+          pin() { grep -E "^$1(\[[^]]*\])?==" .github/ci/requirements-ci.txt; }
+          pip install "$(pin anthropic)" "$(pin openai)" "$(pin jsonschema)" "$(pin pyyaml)"
       - name: Variables WIF (no exportar vacias)
         env:
           SVAC: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
@@ -49,12 +57,12 @@ jobs:
           [ -n "$SVAC" ] && echo "ANTHROPIC_SERVICE_ACCOUNT_ID=$SVAC" >> "$GITHUB_ENV"
           true
       - name: Ejecutar taskflow
+        env:
+          AUDITGATE_LLM_API_KEY: ${{ secrets.AUDITGATE_LLM_API_KEY }}
         run: |
-          if [ -z "$ANTHROPIC_FEDERATION_RULE_ID" ] || [ -z "$ANTHROPIC_ORGANIZATION_ID" ]; then
-            echo "WIF sin configurar (vars ANTHROPIC_*): auditoria omitida." >> "$GITHUB_STEP_SUMMARY"; exit 0
-          fi
+          # Sin llave ni WIF, el script avisa y sale en 0 sin generar audit.md.
           python scripts/agent_audit.py "$TASKFLOW" --out audit.md --json-out audit.json
-          cat audit.md >> "$GITHUB_STEP_SUMMARY"
+          [ -f audit.md ] && cat audit.md >> "$GITHUB_STEP_SUMMARY" || true
       - name: Abrir issue para validacion humana
         if: hashFiles('audit.md') != ''
         env:

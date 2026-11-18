@@ -19,6 +19,8 @@ API_KEY = "sk-ant-api03-FAKE_KEY_FOR_DEMO_ONLY"
 DATABASE_PASSWORD = os.environ.get("DATABASE_PASSWORD", "")
 # ok: auditgate.python.hardcoded-credential
 TOKEN_HEADER = ""
+# ok: auditgate.python.hardcoded-credential
+SECRET_NAME = "AUDITGATE_LLM_API_KEY"
 
 
 def sqli(username):

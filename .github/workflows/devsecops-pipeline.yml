@@ -44,7 +44,12 @@ jobs:
       image-dockerfile: "docker/app/Dockerfile"
       image-context: "."
       iac-dir: "terraform"
+      tests-path: "tests/"
       ai-triage: true
+      # Modelo del agente (variables del repo; la llave va en el Environment `auditgate`).
+      llm-provider: ${{ vars.AUDITGATE_LLM_PROVIDER }}
+      llm-model: ${{ vars.AUDITGATE_LLM_MODEL }}
+      llm-base-url: ${{ vars.AUDITGATE_LLM_BASE_URL }}
       # IDs de WIF como *variables* del repo (no son secretos). Sin ellas, el triage se omite.
       anthropic-organization-id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
       anthropic-federation-rule-id: ${{ vars.ANTHROPIC_RULE_ID_PR_TRIAGE }}
