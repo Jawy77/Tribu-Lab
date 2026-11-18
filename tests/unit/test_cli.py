@@ -77,4 +77,5 @@ def test_rendered_workflow_pins_both_refs():
     assert f"security-platform.yml@{SHA} # v0.1.0" in out
     assert f"platform-ref: {SHA}" in out
     assert "${{ vars.AUDITGATE_LLM_PROVIDER }}" in out
-    assert "AUDITGATE_LLM_API_KEY" not in out  # la llave nunca se escribe en el repo
+    assert "secrets: inherit" in out  # sin esto el secreto del Environment no llega (bug real, sandbox PR #2)
+    assert "AUDITGATE_LLM_API_KEY: " not in out  # el valor de la llave nunca se escribe en el repo

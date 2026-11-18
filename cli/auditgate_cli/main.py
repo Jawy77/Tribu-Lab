@@ -128,6 +128,10 @@ jobs:
       security-events: write # alertas en Code Scanning
       pull-requests: write # comentario del agente de triage
       id-token: write # solo si usas Claude sin llave (WIF)
+    # Sin esto, el job del agente NO recibe el secreto del Environment `{ENVIRONMENT}`
+    # (en un reusable workflow, los secretos de Environment solo llegan con inherit).
+    # Auditgate esta fijado por SHA y solo lee AUDITGATE_LLM_API_KEY.
+    secrets: inherit
     with:
       platform-ref: {sha} # mismo SHA que el `uses:`
       requirements: "{project['requirements']}"

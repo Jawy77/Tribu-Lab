@@ -51,6 +51,9 @@ tu terminal ──getpass──► auditgate ──stdin──► gh ──(cifr
 - **Alcance mínimo:** es un secreto del **Environment** `auditgate`, no del repo. Solo la
   reciben los jobs que declaran ese environment (triage y auditoría). Los escáneres, Dependabot
   y cualquier otro workflow no la ven.
+- **`secrets: inherit` en el caller:** en un workflow reutilizable, GitHub solo entrega el
+  secreto del Environment si quien lo llama usa `secrets: inherit` (`auditgate init` ya lo
+  pone). Auditgate está fijado por SHA y sus jobs solo leen `AUDITGATE_LLM_API_KEY`.
 - **Enmascarada:** si algo la imprime por error, GitHub la tapa en los logs.
 - **Sin forks:** los PRs desde forks no reciben secretos y el job de triage además los filtra.
 

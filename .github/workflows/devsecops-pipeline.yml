@@ -38,6 +38,7 @@ jobs:
       security-events: write # subir SARIF a Code Scanning
       pull-requests: write # solo para el comentario del agente de triage
       id-token: write # OIDC → Workload Identity Federation con Anthropic (sin API key)
+    secrets: inherit # el job del agente recibe el secreto del Environment `auditgate`
     with:
       python-version: "3.12"
       requirements: "vulnerable_app/requirements.txt docker/openclaw/requirements.txt requirements.txt"

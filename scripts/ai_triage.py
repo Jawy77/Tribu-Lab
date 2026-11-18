@@ -226,6 +226,12 @@ def main() -> int:
         )
     except Exception as exc:  # el triage es asesor: un fallo nunca rompe el pipeline
         print(f"Triage omitido: {type(exc).__name__}: {exc}", file=sys.stderr)
+        if type(exc).__name__ in ("AuthenticationError", "PermissionDeniedError"):
+            print(
+                f"→ El proveedor ({cfg.provider}) rechazo la llave. Revisa que sea una API key "
+                "valida de ese proveedor y rotala con: auditgate set-key",
+                file=sys.stderr,
+            )
         return 0
     Path(args.out).write_text(render(findings, result, cfg.label))
     print(f"Triage escrito en {args.out} ({len(findings)} hallazgos).")
