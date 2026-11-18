@@ -4,11 +4,11 @@ jobs:
   bad:
     runs-on: ubuntu-latest
     steps:
-      # ruleid: tribu.gha.action-not-pinned-to-sha
+      # ruleid: auditgate.gha.action-not-pinned-to-sha
       - uses: aquasecurity/trivy-action@master
-      # ruleid: tribu.gha.action-not-pinned-to-sha
+      # ruleid: auditgate.gha.action-not-pinned-to-sha
       - uses: actions/checkout@v4
-      # ok: tribu.gha.action-not-pinned-to-sha
+      # ok: auditgate.gha.action-not-pinned-to-sha
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # ok: tribu.gha.action-not-pinned-to-sha
+      # ok: auditgate.gha.action-not-pinned-to-sha
       - uses: ./.github/workflows/security-platform.yml

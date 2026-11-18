@@ -129,7 +129,7 @@ def read_file():
         return jsonify({"error": "Access denied"}), 403
 
     try:
-        # nosemgrep: tribu.flask.untrusted-input-to-dangerous-sink -- excepcion revisada: ruta resuelta y confinada a BASE_DATA_DIR
+        # nosemgrep: auditgate.flask.untrusted-input-to-dangerous-sink -- excepcion revisada: ruta resuelta y confinada a BASE_DATA_DIR
         with open(requested_path) as f:
             content = f.read()
         return jsonify({"content": content})
@@ -165,7 +165,7 @@ def fetch_url():
         return jsonify({"error": f"Domain not allowed. Allowed: {ALLOWED_FETCH_DOMAINS}"}), 403
 
     try:
-        # nosemgrep: tribu.flask.untrusted-input-to-dangerous-sink -- excepcion revisada: esquema + allowlist de dominios
+        # nosemgrep: auditgate.flask.untrusted-input-to-dangerous-sink -- excepcion revisada: esquema + allowlist de dominios
         response = urllib.request.urlopen(url, timeout=5)  # nosec B310 — validated via allowlist
         content = response.read().decode("utf-8", errors="replace")
         return jsonify({"content": content})

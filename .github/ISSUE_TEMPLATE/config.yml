@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/Jawy77/auditgate/security/advisories/new
+    about: Nunca en un issue público. Usa private vulnerability reporting.

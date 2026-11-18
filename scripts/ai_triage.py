@@ -185,7 +185,7 @@ ICON = {"true_positive": "🔴 TP", "false_positive": "⚪ FP", "needs_human": "
 def render(findings: list[dict], result: dict) -> str:
     by_id = {r["id"]: r for r in result.get("findings", [])}
     out = [
-        "<!-- tribu-ai-triage -->",
+        "<!-- auditgate-ai-triage -->",
         "## 🤖 AI triage (asesor, no bloqueante)",
         "",
         result.get("summary", "").strip(),
@@ -230,7 +230,7 @@ def main() -> int:
     findings = load_findings(Path(args.sarif_dir), changed_files(args.base))
     if not findings:
         Path(args.out).write_text(
-            "<!-- tribu-ai-triage -->\n## 🤖 AI triage\n\nSin hallazgos en los archivos de este PR. ✅\n"
+            "<!-- auditgate-ai-triage -->\n## 🤖 AI triage\n\nSin hallazgos en los archivos de este PR. ✅\n"
         )
         return 0
     if not has_anthropic_credentials():
