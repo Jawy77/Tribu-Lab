@@ -5,7 +5,7 @@
 
 # Security Scanning
 bandit>=1.7.0
-semgrep>=1.50.0
+semgrep>=1.185.0
 safety>=3.0.0
 
 # Testing
