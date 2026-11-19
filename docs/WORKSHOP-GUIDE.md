@@ -16,8 +16,8 @@
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/Jawy77/Tribu-Lab.git
-cd Tribu-Lab
+git clone https://github.com/Jawy77/auditgate.git
+cd auditgate
 
 # Instalar dependencias del proyecto
 pip install -r requirements.txt
@@ -160,13 +160,13 @@ pytest tests/ -v -m owasp_a07   # Solo secrets tests
 
 ### 5.1 — Fork el repositorio
 
-1. Ve a [github.com/Jawy77/Tribu-Lab](https://github.com/Jawy77/Tribu-Lab)
+1. Ve a [github.com/Jawy77/auditgate](https://github.com/Jawy77/auditgate)
 2. Click en **Fork** (esquina superior derecha)
 3. Espera a que se cree la copia en tu cuenta
 
 ### 5.2 — Configura secrets (opcional, para alertas)
 
-1. Ve a tu fork: `github.com/<tu-user>/Tribu-Lab`
+1. Ve a tu fork: `github.com/<tu-user>/auditgate`
 2. **Settings** > **Secrets and variables** > **Actions**
 3. Click **New repository secret** para cada uno:
 
@@ -182,8 +182,8 @@ pytest tests/ -v -m owasp_a07   # Solo secrets tests
 
 ```bash
 # Clona TU fork
-git clone https://github.com/<tu-user>/Tribu-Lab.git
-cd Tribu-Lab
+git clone https://github.com/<tu-user>/auditgate.git
+cd auditgate
 
 # Haz cualquier cambio
 echo "# Mi taller DevSecOps" >> README.md
@@ -336,7 +336,7 @@ Bogota (Parrot OS)              Virginia (EC2 Agent)
 |                  |  |                  |  |                  |
 |  github.com/     |  |  discord.gg/     |  |  t.me/           |
 |  Jawy77/         |  |  bunker-devsecops|  |  claude_co       |
-|  Tribu-Lab       |  |                  |  |                  |
+|  auditgate       |  |                  |  |                  |
 +------------------+  +------------------+  +------------------+
      Repositorio          Discord              Telegram
 ```

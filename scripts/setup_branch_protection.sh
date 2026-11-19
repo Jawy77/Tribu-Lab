@@ -5,14 +5,14 @@
 #
 # Prerequisitos:
 #   - gh auth login (autenticado con permisos admin)
-#   - Repo: Jawy77/Tribu-Lab
+#   - Repo: Jawy77/auditgate
 #
 # Uso: ./setup_branch_protection.sh
 # =============================================================================
 
 set -euo pipefail
 
-REPO="Jawy77/Tribu-Lab"
+REPO="Jawy77/auditgate"
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'

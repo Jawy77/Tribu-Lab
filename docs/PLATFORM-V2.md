@@ -86,7 +86,7 @@ estricto se puede adoptar en repos con historia. La deuda se paga con Dependabot
    detectan variantes del patrón en su siguiente PR.
 
 Ejemplo real en este repo: las 7 vulnerabilidades de `vulnerable_app/app.py`
-(el *Find*) se codificaron en `rules/python/tribu-flask.yml`. Esas reglas detectan las
+(el *Find*) se codificaron en `rules/python/auditgate-flask.yml`. Esas reglas detectan las
 7, con 0 falsos positivos en `app_secure.py`: las dos excepciones están revisadas y
 documentadas con `nosemgrep` + justificación.
 

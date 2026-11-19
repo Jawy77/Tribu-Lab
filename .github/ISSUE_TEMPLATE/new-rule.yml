@@ -1,0 +1,34 @@
+name: Nueva regla
+description: Propón un patrón para codificar como regla determinista (Extract → Codify)
+labels: ["rule", "needs-triage"]
+body:
+  - type: textarea
+    id: pattern
+    attributes:
+      label: Patrón
+      description: ¿Qué patrón generalizable detecta? No el bug puntual, la familia.
+    validations: { required: true }
+  - type: textarea
+    id: vulnerable
+    attributes:
+      label: Ejemplo vulnerable (debe disparar)
+      render: python
+    validations: { required: true }
+  - type: textarea
+    id: safe
+    attributes:
+      label: Ejemplo seguro (no debe disparar)
+      render: python
+    validations: { required: true }
+  - type: dropdown
+    id: severity
+    attributes:
+      label: ¿Debe bloquear el PR?
+      options:
+        - "Sí: ERROR (alta confianza, bajo ruido)"
+        - "No: WARNING (solo reporta)"
+    validations: { required: true }
+  - type: input
+    id: refs
+    attributes:
+      label: CWE / OWASP / referencia

@@ -5,7 +5,7 @@
 # Severidad ERROR = bloquea el PR (gate determinista). WARNING = solo reporta.
 # =============================================================================
 rules:
-  - id: tribu.flask.sqli-string-built-query
+  - id: auditgate.flask.sqli-string-built-query
     languages: [python]
     severity: ERROR
     message: >-
@@ -34,7 +34,7 @@ rules:
                       ...
               - pattern: $CUR.execute($Q, ...)
 
-  - id: tribu.flask.command-injection-shell-true
+  - id: auditgate.flask.command-injection-shell-true
     languages: [python]
     severity: ERROR
     message: >-
@@ -49,7 +49,7 @@ rules:
           - pattern: subprocess.$FN($CMD, ..., shell=True, ...)
       - pattern-not: subprocess.$FN("...", ..., shell=True, ...)
 
-  - id: tribu.flask.untrusted-input-to-dangerous-sink
+  - id: auditgate.flask.untrusted-input-to-dangerous-sink
     languages: [python]
     severity: ERROR
     mode: taint
@@ -80,7 +80,7 @@ rules:
           - pattern: urllib.request.urlopen(...)
           - pattern: requests.$METHOD(...)
 
-  - id: tribu.flask.debug-enabled
+  - id: auditgate.flask.debug-enabled
     languages: [python]
     severity: ERROR
     message: Flask con debug=True expone el debugger de Werkzeug (RCE).
@@ -90,7 +90,7 @@ rules:
       origin: "Find: vulnerable_app/app.py#__main__"
     pattern: $APP.run(..., debug=True, ...)
 
-  - id: tribu.python.hardcoded-credential
+  - id: auditgate.python.hardcoded-credential
     languages: [python]
     severity: ERROR
     message: >-

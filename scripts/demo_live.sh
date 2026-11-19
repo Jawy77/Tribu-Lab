@@ -384,7 +384,7 @@ TOTAL_FINDINGS=$((TOTAL_FINDINGS + SECRETS_COUNT))
 update_status stage "secret-scan" "warning" "$SECRETS_COUNT"
 update_status log "error" "alert" "SECRET SCAN: $SECRETS_COUNT secrets encontrados"
 
-send_telegram "🔑 *SECRET SCAN — ALERTA*%0A%0ARepo: \`Tribu-Lab\`%0ASecrets encontrados: *${SECRETS_COUNT}*%0A%0A• SECRET_KEY hardcodeada%0A• DATABASE_PASSWORD en texto plano%0A• API_KEY expuesta (sk-ant-)%0A%0AAccion: mover a variables de entorno"
+send_telegram "🔑 *SECRET SCAN — ALERTA*%0A%0ARepo: \`auditgate\`%0ASecrets encontrados: *${SECRETS_COUNT}*%0A%0A• SECRET_KEY hardcodeada%0A• DATABASE_PASSWORD en texto plano%0A• API_KEY expuesta (sk-ant-)%0A%0AAccion: mover a variables de entorno"
 
 send_discord \
     "🔑 Secret Scan — ALERTA" \
@@ -773,7 +773,7 @@ echo ""
 
 FINAL_TG="🛡️ *BUNKER DevSecOps — REPORTE FINAL*%0A"
 FINAL_TG+="━━━━━━━━━━━━━━━━━━━━━━%0A"
-FINAL_TG+="Repo: \`Tribu-Lab\`%0A"
+FINAL_TG+="Repo: \`auditgate\`%0A"
 FINAL_TG+="Branch: \`main\`%0A"
 FINAL_TG+="Run: Demo en Vivo%0A"
 FINAL_TG+="%0A*Results (12 Security Checks):*%0A"

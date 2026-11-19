@@ -24,19 +24,19 @@ job de GitHub ──(JWT OIDC: sub, aud, repository, workflow_ref, jti)──►
 
 - Workspace dedicado, p. ej. **`ci-agents`**, con **límite de gasto**. Si una regla se
   abusa, el daño máximo es ese límite.
-- Service account, p. ej. **`tribu-ci-agents`**, rol `developer`, miembro de `ci-agents`.
+- Service account, p. ej. **`auditgate-ci-agents`**, rol `developer`, miembro de `ci-agents`.
 
 ## 3. Regla A: triage en Pull Requests
 
 | Campo | Valor |
 |---|---|
-| Name | `tribu-pr-triage` |
+| Name | `auditgate-pr-triage` |
 | Issuer | `github-actions` |
-| Subject (`subject_prefix`) | `repo:Jawy77/Tribu-Lab:pull_request` (exacto, **sin** `*`) |
+| Subject (`subject_prefix`) | `repo:Jawy77/auditgate:pull_request` (exacto, **sin** `*`) |
 | Audience | `https://api.anthropic.com` |
-| Claims | `repository_owner` = `Jawy77` · `repository` = `Jawy77/Tribu-Lab` · `event_name` = `pull_request` |
-| Condition (CEL) | `claims.job_workflow_ref.startsWith("Jawy77/Tribu-Lab/.github/workflows/security-platform.yml@")` |
-| Target | service account `tribu-ci-agents` |
+| Claims | `repository_owner` = `Jawy77` · `repository` = `Jawy77/auditgate` · `event_name` = `pull_request` |
+| Condition (CEL) | `claims.job_workflow_ref.startsWith("Jawy77/auditgate/.github/workflows/security-platform.yml@")` |
+| Target | service account `auditgate-ci-agents` |
 | Workspace | `ci-agents` |
 | OAuth scope | `workspace:developer` |
 | Token lifetime | `600` s |
@@ -55,10 +55,10 @@ Por qué así:
 
 | Campo | Valor |
 |---|---|
-| Name | `tribu-agent-audit-main` |
-| Subject (`subject_prefix`) | `repo:Jawy77/Tribu-Lab:ref:refs/heads/main` |
+| Name | `auditgate-agent-audit-main` |
+| Subject (`subject_prefix`) | `repo:Jawy77/auditgate:ref:refs/heads/main` |
 | Audience | `https://api.anthropic.com` |
-| Claims | `repository` = `Jawy77/Tribu-Lab` · `workflow_ref` = `Jawy77/Tribu-Lab/.github/workflows/agent-audit.yml@refs/heads/main` |
+| Claims | `repository` = `Jawy77/auditgate` · `workflow_ref` = `Jawy77/auditgate/.github/workflows/agent-audit.yml@refs/heads/main` |
 | Target / Workspace / Scope / Lifetime | igual que la regla A |
 
 Solo el workflow de auditoría, ejecutado desde `main` (rama protegida), puede pedir un
@@ -67,10 +67,10 @@ token con esta regla. El job también exige `github.ref == 'refs/heads/main'`.
 ## 5. Variables del repositorio (no son secretos)
 
 ```bash
-gh variable set ANTHROPIC_ORGANIZATION_ID     -R Jawy77/Tribu-Lab --body "<uuid de la org>"
-gh variable set ANTHROPIC_RULE_ID_PR_TRIAGE   -R Jawy77/Tribu-Lab --body "fdrl_..."   # regla A
-gh variable set ANTHROPIC_RULE_ID_AGENT_AUDIT -R Jawy77/Tribu-Lab --body "fdrl_..."   # regla B
-gh variable set ANTHROPIC_SERVICE_ACCOUNT_ID  -R Jawy77/Tribu-Lab --body "svac_..."   # opcional
+gh variable set ANTHROPIC_ORGANIZATION_ID     -R Jawy77/auditgate --body "<uuid de la org>"
+gh variable set ANTHROPIC_RULE_ID_PR_TRIAGE   -R Jawy77/auditgate --body "fdrl_..."   # regla A
+gh variable set ANTHROPIC_RULE_ID_AGENT_AUDIT -R Jawy77/auditgate --body "fdrl_..."   # regla B
+gh variable set ANTHROPIC_SERVICE_ACCOUNT_ID  -R Jawy77/auditgate --body "svac_..."   # opcional
 ```
 
 Si la regla cubre más de un workspace, se pasa también `anthropic-workspace-id`.

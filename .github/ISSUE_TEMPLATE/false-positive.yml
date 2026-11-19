@@ -1,0 +1,21 @@
+name: Falso positivo
+description: Una regla de Auditgate disparó donde no debía
+labels: ["false-positive", "needs-triage"]
+body:
+  - type: input
+    id: rule
+    attributes:
+      label: ID de la regla
+      placeholder: auditgate.flask.sqli-string-built-query
+    validations: { required: true }
+  - type: textarea
+    id: code
+    attributes:
+      label: Código mínimo que dispara la regla
+      render: python
+    validations: { required: true }
+  - type: textarea
+    id: why
+    attributes:
+      label: ¿Por qué es seguro?
+    validations: { required: true }

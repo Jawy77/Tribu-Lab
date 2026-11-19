@@ -1,61 +1,61 @@
-[![DevSecOps Pipeline](https://github.com/Jawy77/Tribu-Lab/actions/workflows/devsecops-pipeline.yml/badge.svg)](https://github.com/Jawy77/Tribu-Lab/actions/workflows/devsecops-pipeline.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![OWASP Top 10](https://img.shields.io/badge/OWASP-Top%2010%202021-blue.svg)](https://owasp.org/Top10/)
-[![Security Checks](https://img.shields.io/badge/Security%20Checks-12-blueviolet.svg)](#-los-12-checks-de-seguridad)
-[![Workshop](https://img.shields.io/badge/Workshop-500%2B%20attendees-orange.svg)](#)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://python.org)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20Copilot-8A2BE2.svg)](https://claude.ai)
+[![Security Gate](https://github.com/Jawy77/auditgate/actions/workflows/devsecops-pipeline.yml/badge.svg)](https://github.com/Jawy77/auditgate/actions/workflows/devsecops-pipeline.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Actions pinned by SHA](https://img.shields.io/badge/actions-pinned%20by%20SHA-informational.svg)](rules/github-actions/auditgate-actions.yml)
+[![Releases: SBOM + SLSA + cosign](https://img.shields.io/badge/releases-SBOM%20%C2%B7%20SLSA%20%C2%B7%20cosign-informational.svg)](.github/workflows/release.yml)
 
-<h1 align="center">Bunker DevSecOps — 12 Security Checks Automaticos en < 10 min</h1>
+<h1 align="center">Auditgate</h1>
 
-<p align="center"><strong>Workshop de Seguridad con AI | Tribu | Hacklab Bogota | Ethereum Bogota | Mantishield</strong></p>
+<p align="center"><strong>Plataforma de seguridad para CI/CD, open source: un gate determinista que bloquea solo lo nuevo, y agentes de IA que encuentran, priorizan y ayudan a codificar, sin decidir nunca un merge.</strong></p>
 
-<p align="center"><code>12 security checks automaticos en cada commit, alineados con OWASP Top 10 2021, completando en menos de 10 minutos. Costo: $0.</code></p>
+<p align="center"><em>Open-source CI/CD security platform: a deterministic gate that blocks only what's new, plus AI agents that find, triage and help codify, and never decide a merge.</em></p>
 
----
-
-> [!CAUTION]
-> ## REPOSITORIO CON CODIGO INTENCIONALMENTE VULNERABLE
->
-> El archivo `vulnerable_app/app.py` contiene **7 vulnerabilidades plantadas** para fines educativos:
->
-> | # | Vulnerabilidad | OWASP ID | CWE |
-> |---|---|---|---|
-> | 1 | **SQL Injection** — f-string en query SQL | A03:2021 | CWE-89 |
-> | 2 | **Command Injection** — subprocess con shell=True | A03:2021 | CWE-78 |
-> | 3 | **Hardcoded Secrets** — SECRET_KEY, DATABASE_PASSWORD, API_KEY | A07:2021 | CWE-798 |
-> | 4 | **Insecure Deserialization** — pickle.loads en datos del usuario | A08:2021 | CWE-502 |
-> | 5 | **Path Traversal** — open() sin sanitizar ruta | A01:2021 | CWE-22 |
-> | 6 | **SSRF** — urlopen sin validacion de dominio/esquema | A10:2021 | CWE-918 |
-> | 7 | **Debug Mode** — Flask debug=True + bind 0.0.0.0 | A05:2021 | CWE-94 |
->
-> **Los secrets son FAKE** — `sk-ant-api03-FAKE_KEY_FOR_DEMO_ONLY` no funciona en ningun servicio.
->
-> **NUNCA** desplegar `vulnerable_app/` en produccion ni en redes expuestas.
->
-> **Uso exclusivo**: educacion y demostracion de herramientas DevSecOps.
+<p align="center"><code>El agente descubre y prioriza. El determinismo bloquea.</code></p>
 
 ---
 
-## 🚀 v2 — De "Bunker" a Security Platform
+## Por qué existe
 
-> **v1 alertaba; v2 bloquea.** En v1 los 12 checks corrían con `continue-on-error`/`|| true`,
-> así que `main` quedaba en verde con 7 vulnerabilidades plantadas, y el propio pipeline
-> tenía 20 actions sin fijar por SHA. v2 aplica *Security Platform Engineering* y la
-> metodología **Find → Extract → Codify → Scale** del GitHub Security Lab.
+La mayoría de los pipelines de seguridad **alertan, pero no bloquean**: corren 12 escáneres con
+`continue-on-error` y `main` sigue en verde con vulnerabilidades adentro. Y el propio pipeline suele
+ser superficie de ataque: actions sin fijar, tokens con permisos de más y secretos de larga duración.
+
+Auditgate aplica *Security Platform Engineering* (la seguridad como producto interno, un *paved road*
+que cada repo hereda) y la metodología **Find → Extract → Codify → Scale** del GitHub Security Lab:
+
+| Fase | Quién | En Auditgate |
+|---|---|---|
+| **Find** | Agente | Auditoría semanal con taskflow (map → hunt → refute → extract) → issue `needs-validation` |
+| **Validate** | Humano | Reproduce con PoC. Ningún hallazgo de un agente bloquea sin esto |
+| **Extract** | Humano + agente | Patrón generalizable, no el bug puntual |
+| **Codify** | Regla | Regla Semgrep + fixture con tests en [`rules/`](rules/). El gate exige que pasen |
+| **Scale** | Plataforma | El reusable workflow lleva la regla a cada repo que lo consume |
+
+## Qué incluye
 
 | Pieza | Archivo | Rol |
 |---|---|---|
-| Paved road | [`.github/workflows/security-platform.yml`](.github/workflows/security-platform.yml) | Reusable workflow: cualquier repo lo consume con unas 10 líneas |
+| Paved road | [`security-platform.yml`](.github/workflows/security-platform.yml) | Reusable workflow; un repo lo consume con unas 10 líneas |
 | Gate determinista | job `🚦 Security Gate` | Único check requerido. Bloquea solo lo **nuevo** (diff-aware) |
-| Codify | [`rules/`](rules/) | Reglas Semgrep propias **con tests** (`semgrep --test rules/`) |
-| Triage AI | [`scripts/ai_triage.py`](scripts/ai_triage.py) | Comenta TP/FP, alcanzabilidad y fix en el PR. **Nunca bloquea** |
-| Find (agente) | [`agents/taskflows/`](agents/taskflows/) + [`agent-audit.yml`](.github/workflows/agent-audit.yml) | map → hunt → refute → extract → issue `needs-validation` (HITL) |
-| Supply chain | [`release.yml`](.github/workflows/release.yml), [`dependabot.yml`](.github/dependabot.yml) | SHA pinning, mínimo privilegio, SBOM, provenance SLSA, cosign keyless, cooldown |
+| Reglas con tests | [`rules/`](rules/) | Python/Flask y supply chain de GitHub Actions |
+| Triage con IA | [`scripts/ai_triage.py`](scripts/ai_triage.py) | Comenta TP/FP, alcanzabilidad y fix en el PR. **Nunca bloquea** |
+| Agente de auditoría | [`agents/taskflows/`](agents/taskflows/) | La metodología en YAML; el modelo es intercambiable |
+| Sin API keys | [`docs/WIF-SETUP.md`](docs/WIF-SETUP.md) | Los agentes se autentican con el OIDC de GitHub (Workload Identity Federation) |
+| Supply chain | [`release.yml`](.github/workflows/release.yml) | SHA pinning, mínimo privilegio, SBOM, provenance SLSA, cosign keyless |
 | Política | [`SECURITY.md`](SECURITY.md) | Reglas para reportes, incluidos los asistidos por IA |
 
-**Regla de oro:** *el agente descubre y prioriza; el determinismo bloquea.*
-Detalle completo en [`docs/PLATFORM-V2.md`](docs/PLATFORM-V2.md).
+Arquitectura, política del gate y guardrails de los agentes: [`docs/PLATFORM-V2.md`](docs/PLATFORM-V2.md).
+
+## Origen
+
+Auditgate nació como **Bunker DevSecOps**, el workshop de Tribu, Hacklab Bogotá y Ethereum Bogotá
+con Mantishield (más de 500 asistentes). El material del workshop sigue en este repo como demo viva
+de la plataforma.
+
+> [!CAUTION]
+> **Este repo incluye código intencionalmente vulnerable para la demo.**
+> `vulnerable_app/app.py` tiene 7 vulnerabilidades plantadas (SQLi, command injection, secretos
+> hardcodeados, deserialización insegura, path traversal, SSRF y debug mode). Los secretos son
+> FAKE. **Nunca** despliegues `vulnerable_app/` en producción ni en redes expuestas.
 
 ---
 
@@ -140,8 +140,8 @@ Cada push a `main` y cada Pull Request ejecuta automaticamente estos 12 checks v
 ## Quick Start
 
 ```bash
-git clone https://github.com/Jawy77/Tribu-Lab.git
-cd Tribu-Lab
+git clone https://github.com/Jawy77/auditgate.git
+cd auditgate
 pip install -r requirements.txt
 
 # Ver las vulnerabilidades
@@ -215,7 +215,7 @@ El pipeline necesita 3 secrets en GitHub para enviar notificaciones. Sin ellos e
 ### Paso 4 — Configurar en GitHub
 
 ```
-1. Ve a tu fork: github.com/<tu-user>/Tribu-Lab
+1. Ve a tu fork: github.com/<tu-user>/auditgate
 2. Settings -> Secrets and variables -> Actions
 3. Click "New repository secret" tres veces:
 ```
@@ -240,7 +240,7 @@ nano .env
 ## Estructura del Repositorio
 
 ```
-Tribu-Lab/
+auditgate/
 |
 +-- .github/workflows/
 |   +-- devsecops-pipeline.yml       12 security gates automaticos
