@@ -24,7 +24,7 @@ v2 aplica dos ideas:
                  │                                           │
   secrets ───────┤ gitleaks (commits del PR) + TruffleHog    │
   sast ──────────┤ Semgrep diff-aware + reglas propias       │
-  dependencies ──┤ pip-audit diff-aware                      ├──► 🚦 security-gate ──► merge
+  dependencies ──┤ osv-scanner diff-aware (multi-ecosistema)  ├──► 🚦 security-gate ──► merge
   container ─────┤ Trivy CRITICAL con fix + Hadolint         │      (único check requerido)
   iac ───────────┤ Checkov (reporte)                         │
   integrity ─────┤ semgrep --test (reglas) + self-audit + pytest│

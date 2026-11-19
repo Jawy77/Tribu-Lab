@@ -64,8 +64,23 @@ auditgate scan --checks sast   # solo un control: secrets, sast, deps, actions
 
 `scan` corre en un worktree temporal de tu último commit, así que evalúa lo que llegará al PR
 y nunca toca tus archivos. Usa las mismas herramientas que CI, instaladas aparte:
-`brew install gitleaks`, `pipx install semgrep`, `pipx install pip-audit`. Si falta una, ese
+`brew install gitleaks osv-scanner` y `pipx install semgrep`. Si falta una, ese
 control se omite y lo avisa; con `--strict`, falta = error.
+
+### Lenguajes
+
+| Control | Cobertura |
+|---|---|
+| Secretos, workflows de GitHub Actions, contenedor | Cualquier lenguaje |
+| **Dependencias** (osv-scanner) | npm, PyPI, Go, Maven/Gradle, crates.io, RubyGems, Packagist, NuGet… con transitivas |
+| **SAST** (Semgrep) | Un set de reglas por cada lenguaje detectado: Python, JavaScript, TypeScript, Go, Java, Kotlin, Ruby, PHP, C#, Rust, C/C++, Scala, Swift |
+
+Reglas propias de Auditgate (MIT, con tests): Python/Flask y Node.js. Para el resto se usa el set
+del registro de Semgrep de ese lenguaje, que tu Semgrep descarga para tu propio uso (Auditgate no
+lo redistribuye; `--no-registry` lo desactiva).
+
+**El gate nunca da un verde engañoso:** si encuentra código en un lenguaje sin reglas (por ejemplo
+Dart), lo avisa en el PR, en `auditgate scan` y en `auditgate doctor`; con `--strict`, es un error.
 
 **Para agentes:** agrega a tu `CLAUDE.md` (o equivalente) algo como *"antes de abrir un PR,
 corre `auditgate scan --json` y corrige todo lo que tenga `status: blocked`"*. El agente

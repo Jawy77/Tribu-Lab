@@ -8,8 +8,9 @@ y HEAD. Corre en un `git worktree` temporal de HEAD, asi:
 
 Politica (igual que security-platform.yml): bloquea solo lo NUEVO.
   secrets  gitleaks   secretos en los commits nuevos
-  sast     semgrep    hallazgos ERROR nuevos (reglas de Auditgate + p/python + rules/ propias)
-  deps     pip-audit  vulnerabilidades nuevas en requirements*.txt
+  sast     semgrep      hallazgos ERROR nuevos, con reglas para CADA lenguaje detectado
+                        (reglas de Auditgate + rules/ propias + set del registro por lenguaje)
+  deps     osv-scanner  vulnerabilidades nuevas en dependencias (npm, PyPI, Go, Maven, crates...)
   actions  auditgate  actions sin fijar por SHA en .github/workflows
 
 Codigos de salida: 0 pasa · 1 bloqueado · 2 error de configuracion o de herramienta.
@@ -25,15 +26,15 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from auditgate import __version__
-from auditgate.project import detect_project, unpinned_actions
+from auditgate.languages import sast_plan
+from auditgate.project import unpinned_actions
 
-RULES_DIR = Path(__file__).resolve().parent / "rules"
 ALL_CHECKS = ("secrets", "sast", "deps", "actions")
 
 INSTALL_HINTS = {
     "gitleaks": "brew install gitleaks  (o https://github.com/gitleaks/gitleaks#installing)",
     "semgrep": "pipx install semgrep",
-    "pip-audit": "pipx install pip-audit",
+    "osv-scanner": "brew install osv-scanner  (o https://google.github.io/osv-scanner/installation/)",
 }
 
 EXIT_PASSED, EXIT_BLOCKED, EXIT_ERROR = 0, 1, 2
@@ -115,19 +116,15 @@ def check_secrets(wt: Path, merge_base: str, head: str) -> Check:
     return check
 
 
-def check_sast(wt: Path, merge_base: str, head: str, use_registry: bool) -> Check:
+def check_sast(wt: Path, merge_base: str, head: str, use_registry: bool) -> tuple[Check, dict]:
+    """SAST con reglas para cada lenguaje detectado. Devuelve tambien el plan de cobertura."""
     check = Check("sast", "semgrep")
+    plan = sast_plan(wt, use_registry)
     if not shutil.which("semgrep"):
-        return _missing(check, "semgrep")
+        return _missing(check, "semgrep"), plan
     # Las reglas de GitHub Actions las aplica el check `actions` (respeta --no-enforce-pins);
     # aqui solo van las de codigo, para no duplicar ni saltarse esa politica.
-    configs = []
-    for d in sorted(p for p in RULES_DIR.iterdir() if p.is_dir() and p.name != "github-actions"):
-        configs += ["--config", str(d)]
-    if use_registry:
-        configs += ["--config", "p/python"]
-    if (wt / "rules").is_dir():
-        configs += ["--config", str(wt / "rules")]
+    configs = [arg for c in plan["configs"] for arg in ("--config", c)]
     cmd = ["semgrep", "scan", *configs, "--metrics=off", "--severity", "ERROR", "--json",
            "--exclude", ".auditgate"]
     if merge_base != head:
@@ -137,7 +134,7 @@ def check_sast(wt: Path, merge_base: str, head: str, use_registry: bool) -> Chec
         data = json.loads(proc.stdout)
     except json.JSONDecodeError:
         check.status, check.detail = "error", f"semgrep falló: {proc.stderr.strip()[-300:]}"
-        return check
+        return check, plan
     fatal = [e for e in data.get("errors", []) if e.get("level") == "error"]
     for r in data.get("results", []):
         # Con --config <ruta> semgrep antepone la ruta al id; nos quedamos con auditgate.<grupo>.<regla>.
@@ -148,35 +145,40 @@ def check_sast(wt: Path, merge_base: str, head: str, use_registry: bool) -> Chec
     if fatal and not check.findings:
         check.status = "error"
         check.detail = f"semgrep: {fatal[0].get('message', '')[:240]}"
-        return check
+        return check, plan
     check.status = "blocked" if check.findings else "passed"
+    notes = []
     if not use_registry:
-        check.detail = "solo reglas de Auditgate (sin registro de Semgrep)"
-    return check
+        notes.append("sin registro de Semgrep")
+    if plan["uncovered"]:
+        notes.append(f"SIN COBERTURA: {', '.join(plan['uncovered'])}")
+    check.detail = " · ".join(notes)
+    return check, plan
 
 
-def check_deps(wt: Path, merge_base: str, files: list[str]) -> Check:
-    check = Check("deps", "pip-audit")
-    if not files:
-        check.status, check.detail = "skipped", "no hay requirements*.txt"
-        return check
-    if not shutil.which("pip-audit"):
-        return _missing(check, "pip-audit")
+def check_deps(head_wt: Path, base_wt: Path | None) -> Check:
+    check = Check("deps", "osv-scanner")
+    if not shutil.which("osv-scanner"):
+        return _missing(check, "osv-scanner")
     from auditgate.depgate import evaluate
 
     try:
-        results = evaluate(merge_base, files, cwd=wt)
+        result = evaluate(head_wt, base_wt)
     except RuntimeError as exc:
         check.status, check.detail = "error", str(exc)[:300]
         return check
-    debt = 0
-    for res in results:
-        debt += len(res["head"]) - len(res["new"])
-        for name, ver, vid in res["new"]:
-            check.findings.append(Finding(vid, res["file"], 0, f"{name}=={ver} vulnerable"))
+    for v in result["new"]:
+        check.findings.append(Finding(v["id"], v["source"], 0,
+                                      f"{v['name']}=={v['version']} ({v['ecosystem']})",
+                                      v["severity"] or "error"))
     check.status = "blocked" if check.findings else "passed"
+    debt = len(result["head"]) - len(result["new"])
+    notes = []
+    if result["head"] or result["new"]:
+        notes.append("ecosistemas: " + ", ".join(sorted({v["ecosystem"] for v in result["head"]})))
     if debt:
-        check.detail = f"{debt} vulnerabilidad(es) previa(s): deuda, no bloquea"
+        notes.append(f"{debt} previa(s): deuda, no bloquea")
+    check.detail = " · ".join(notes)
     return check
 
 
@@ -196,8 +198,7 @@ def check_actions(wt: Path, enforce: bool) -> Check:
 
 # ── orquestacion ─────────────────────────────────────────────────────────────
 def run_scan(repo: Path, base: str | None = None, checks: tuple[str, ...] = ALL_CHECKS,
-             requirements: list[str] | None = None, use_registry: bool = True,
-             enforce_pins: bool = True, strict: bool = False) -> dict:
+             use_registry: bool = True, enforce_pins: bool = True, strict: bool = False) -> dict:
     repo = Path(_git("rev-parse", "--show-toplevel", cwd=repo))
     base_ref = resolve_base(repo, base)
     head = _git("rev-parse", "HEAD", cwd=repo)
@@ -207,25 +208,36 @@ def run_scan(repo: Path, base: str | None = None, checks: tuple[str, ...] = ALL_
     tmp = Path(tempfile.mkdtemp(prefix="auditgate-scan-"))
     wt = tmp / "wt"
     _git("worktree", "add", "--detach", str(wt), head, cwd=repo)
+    # Para dependencias se compara contra la base real (otro worktree), no contra un diff de texto.
+    base_wt = None
+    if "deps" in checks and merge_base != head:
+        base_wt = tmp / "base"
+        _git("worktree", "add", "--detach", str(base_wt), merge_base, cwd=repo)
+    plan: dict = {"languages": {}, "coverage": {}, "uncovered": []}
     try:
-        reqs = requirements if requirements is not None else detect_project(wt)["requirements"].split()
         results: list[Check] = []
         for c in checks:
             if c == "secrets":
                 results.append(check_secrets(wt, merge_base, head))
             elif c == "sast":
-                results.append(check_sast(wt, merge_base, head, use_registry))
+                sast, plan = check_sast(wt, merge_base, head, use_registry)
+                results.append(sast)
             elif c == "deps":
-                results.append(check_deps(wt, merge_base, reqs))
+                results.append(check_deps(wt, base_wt))
             elif c == "actions":
                 results.append(check_actions(wt, enforce_pins))
     finally:
-        subprocess.run(["git", "worktree", "remove", "--force", str(wt)], cwd=repo, capture_output=True)
+        for tree in (wt, base_wt):
+            if tree is not None:
+                subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=repo, capture_output=True)
         shutil.rmtree(tmp, ignore_errors=True)
 
     if strict:
         for r in results:
             if r.status == "skipped" and "no está instalado" in r.detail:
+                r.status = "error"
+            # En modo estricto, codigo sin reglas de SAST no puede dar verde.
+            if r.id == "sast" and plan["uncovered"] and r.status == "passed":
                 r.status = "error"
     statuses = {r.status for r in results}
     gate = "error" if "error" in statuses else "blocked" if "blocked" in statuses else "passed"
@@ -235,6 +247,9 @@ def run_scan(repo: Path, base: str | None = None, checks: tuple[str, ...] = ALL_
         "base": {"ref": base_ref, "merge_base": merge_base},
         "head": head,
         "uncommitted_changes": dirty,
+        "languages": plan["languages"],
+        "sast_coverage": plan["coverage"],
+        "uncovered_languages": plan["uncovered"],
         "checks": [asdict(r) for r in results],
         "summary": {
             "blocking_findings": sum(len(r.findings) for r in results if r.status == "blocked"),
@@ -257,6 +272,8 @@ def render_text(report: dict) -> str:
     ]
     if report["uncommitted_changes"]:
         lines.append("  ⚠ tienes cambios sin commitear: no se evalúan (el PR solo lleva commits)")
+    if report.get("languages"):
+        lines.append("  Lenguajes: " + ", ".join(f"{k} ({v})" for k, v in report["languages"].items()))
     for c in report["checks"]:
         n = len(c["findings"])
         what = {"passed": f"{n} nuevos" if c["id"] != "actions" else "fijadas por SHA",
@@ -278,5 +295,8 @@ def render_text(report: dict) -> str:
     }[report["gate"]]
     if report["summary"]["skipped"] and report["gate"] == "passed":
         verdict += f" (omitidos: {', '.join(report['summary']['skipped'])})"
+    if report.get("uncovered_languages"):
+        lines.append(f"  ⚠ SAST no revisó código en: {', '.join(report['uncovered_languages'])} "
+                     "(no hay reglas para ese lenguaje; agrega reglas en rules/ o revísalo a mano)")
     lines.append(verdict)
     return "\n".join(lines)

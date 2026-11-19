@@ -41,7 +41,6 @@ jobs:
     secrets: inherit # el job del agente recibe el secreto del Environment `auditgate`
     with:
       python-version: "3.12"
-      requirements: "vulnerable_app/requirements.txt docker/openclaw/requirements.txt requirements.txt"
       image-dockerfile: "docker/app/Dockerfile"
       image-context: "."
       iac-dir: "terraform"

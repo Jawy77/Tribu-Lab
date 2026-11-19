@@ -1,0 +1,30 @@
+# Reglas propias para Node.js (JavaScript / TypeScript).
+# Origen (Find): al probar Auditgate en un repo poliglota, el set p/javascript del
+# registro no detecto `exec("ping " + req.query.host)`. Se codifica aqui (Codify).
+rules:
+  - id: auditgate.node.command-injection-child-process
+    languages: [javascript, typescript]
+    severity: ERROR
+    mode: taint
+    message: >-
+      Input del request llega a child_process ($SINK) y se ejecuta en una shell:
+      inyección de comandos. Usa execFile/spawn con los argumentos como lista y
+      valida el valor contra una allowlist.
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A03:2021"
+      origin: "Find: prueba poliglota (web/server.js), hueco de p/javascript"
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query
+          - pattern: $REQ.body
+          - pattern: $REQ.params
+          - pattern: $REQ.headers
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: exec($CMD, ...)
+              - pattern: execSync($CMD, ...)
+              - pattern: $CP.exec($CMD, ...)
+              - pattern: $CP.execSync($CMD, ...)
+          - focus-metavariable: $CMD

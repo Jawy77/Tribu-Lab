@@ -74,6 +74,7 @@ def test_detect_project_and_unpinned(tmp_path: Path):
 
 def test_rendered_workflow_pins_both_refs():
     out = cli.render_workflow(SHA, "v0.1.0", {"requirements": "requirements.txt", "dockerfile": "", "iac_dir": ""}, True)
+    assert "requirements:" not in out  # dependencias y SAST se autodetectan (multi-lenguaje)
     assert f"security-platform.yml@{SHA} # v0.1.0" in out
     assert f"platform-ref: {SHA}" in out
     assert "${{ vars.AUDITGATE_LLM_PROVIDER }}" in out
