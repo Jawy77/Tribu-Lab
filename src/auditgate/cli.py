@@ -24,6 +24,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from auditgate.languages import sast_plan
 from auditgate.project import detect_project, unpinned_actions
 
 PLATFORM_REPO = "Jawy77/auditgate"
@@ -103,7 +104,7 @@ jobs:
     secrets: inherit
     with:
       platform-ref: {sha} # mismo SHA que el `uses:`
-      requirements: "{project['requirements']}"
+      # SAST y dependencias se autodetectan por lenguaje/ecosistema: no hay nada que listar.
       image-dockerfile: "{project['dockerfile']}"
       iac-dir: "{project['iac_dir']}"
       enforce-pinned-actions: {str(enforce_pins).lower()}
@@ -174,8 +175,13 @@ def cmd_init(args) -> int:
     sha = resolve_platform_sha(args.ref)
     project = detect_project(root)
     print(f"Repo: {repo}\nAuditgate: {args.ref} → {sha[:12]}")
-    print(f"Detectado → requirements: {project['requirements'] or '—'} · "
+    plan = sast_plan(root)
+    langs = ", ".join(f"{k} ({v})" for k, v in plan["languages"].items()) or "—"
+    print(f"Detectado → lenguajes: {langs} · "
           f"Dockerfile: {project['dockerfile'] or '—'} · Terraform: {project['iac_dir'] or '—'}")
+    if plan["uncovered"]:
+        print(f"  ⚠ Sin reglas de SAST para: {', '.join(plan['uncovered'])}. El gate avisará en cada PR; "
+              "puedes agregar reglas propias en rules/.")
 
     pins = unpinned_actions(root)
     enforce = True
@@ -282,6 +288,19 @@ def cmd_doctor(args) -> int:
 
     pins = unpinned_actions(Path.cwd())
     check(not pins, "todas las actions fijadas por SHA", f"{len(pins)} action(s) sin fijar por SHA")
+
+    plan = sast_plan(Path.cwd())
+    if plan["languages"]:
+        print("  • Cobertura de SAST por lenguaje:")
+        for lang, n in plan["languages"].items():
+            src = plan["coverage"][lang]
+            print(f"      {'✔' if src else '✖'} {lang} ({n} archivos): {', '.join(src) if src else 'SIN REGLAS'}")
+        check(not plan["uncovered"], "todo el código tiene reglas de SAST",
+              f"sin reglas de SAST: {', '.join(plan['uncovered'])} (el gate no revisa ese código)")
+    for tool in ("semgrep", "gitleaks", "osv-scanner"):
+        found = bool(shutil.which(tool))
+        print(f"  {'✔' if found else '–'} {tool} "
+              f"{'instalado' if found else 'no instalado (solo afecta a `auditgate scan` local)'}")
     print("\nTodo en orden." if ok else "\nHay puntos por corregir.")
     return 0 if ok else 1
 
@@ -298,7 +317,6 @@ def cmd_scan(args) -> int:
     try:
         report = run_scan(
             Path.cwd(), base=args.base, checks=checks,
-            requirements=args.requirements.split() if args.requirements is not None else None,
             use_registry=not args.no_registry, enforce_pins=not args.no_enforce_pins, strict=args.strict,
         )
     except ScanError as exc:
@@ -324,10 +342,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--base", help="rama o SHA base (default: rama por defecto del remoto)")
     p.add_argument("--json", action="store_true", help="salida JSON (para agentes y scripts)")
     p.add_argument("--checks", help="subconjunto, p. ej. sast,deps (default: secrets,sast,deps,actions)")
-    p.add_argument("--requirements", help="requirements a auditar, separados por espacio (default: autodetecta)")
     p.add_argument("--no-registry", action="store_true", help="sin reglas del registro de Semgrep (offline)")
     p.add_argument("--no-enforce-pins", action="store_true", help="actions sin SHA solo se reportan")
-    p.add_argument("--strict", action="store_true", help="herramienta faltante = error (exit 2)")
+    p.add_argument("--strict", action="store_true",
+                   help="herramienta faltante o lenguaje sin reglas de SAST = error (exit 2)")
     p.set_defaults(func=cmd_scan)
 
     p = sub.add_parser("init", help="instala Auditgate en el repo actual")

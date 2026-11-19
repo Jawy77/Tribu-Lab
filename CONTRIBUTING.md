@@ -21,6 +21,10 @@ convierte en una regla con tests**, y esa regla protege a todos los que usan la 
    ```
 5. Abre el PR. El gate exige que los tests de las reglas pasen.
 
+**Reglas para otros lenguajes son especialmente bienvenidas.** Hoy hay reglas propias para
+Python y Node.js; para Go, Java, Ruby, PHP, etc. Auditgate depende del registro de Semgrep.
+Crea `src/auditgate/rules/<lenguaje>/` con tu regla y su fixture: la cobertura se detecta sola.
+
 Una regla ERROR que genera ruido hace más daño que no tenerla: el gate pierde credibilidad.
 Si dudas, empieza en `WARNING`.
 

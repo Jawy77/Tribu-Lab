@@ -11,8 +11,8 @@
 #         platform-ref: <sha>          # el mismo SHA del `uses:`
 #
 # POLITICA (determinista, auditable):
-#   BLOQUEA en PR  → secretos nuevos · SAST ERROR nuevos (diff-aware) ·
-#                    vulns nuevas en dependencias · CRITICAL con fix en imagen ·
+#   BLOQUEA en PR  → secretos nuevos · SAST ERROR nuevos (diff-aware, por lenguaje detectado) ·
+#                    vulns nuevas en dependencias (multi-ecosistema) · CRITICAL con fix en imagen ·
 #                    reglas propias sin tests · actions sin pin por SHA ·
 #                    tests de seguridad rotos
 #   REPORTA        → todo lo demas va a Code Scanning (SARIF) y aparece en el PR
@@ -40,9 +40,9 @@ on:
         type: string
         default: "3.12"
       requirements:
-        description: "requirements*.txt a auditar (separados por espacio; '' = omitir)"
+        description: "OBSOLETO (se ignora): las dependencias se autodetectan en todos los ecosistemas"
         type: string
-        default: "requirements.txt"
+        default: ""
       image-dockerfile:
         description: "Dockerfile de la imagen a construir y escanear ('' = omitir)"
         type: string
@@ -220,17 +220,15 @@ jobs:
           pipx install "$(pin semgrep)"
           pipx install "$(pin bandit)"
 
-      - name: Reglas a aplicar (Auditgate + las propias del repo)
+      - name: Lenguajes del repo → reglas a aplicar y cobertura
         run: |
-          # Reglas de codigo de Auditgate. Las de GitHub Actions las aplica el job de integridad,
-          # que respeta enforce-pinned-actions (si fueran aqui, SAST bloquearia igual).
-          CONFIGS="--config p/python"
-          for d in "$AG"/src/auditgate/rules/*/; do
-            [ "$(basename "$d")" = "github-actions" ] || CONFIGS="$CONFIGS --config $d"
-          done
-          # Reglas codificadas por el propio equipo (Find → Extract → Codify en su repo)
-          [ -d rules ] && CONFIGS="$CONFIGS --config rules/"
+          # Un set de reglas por cada lenguaje detectado (reglas de Auditgate + rules/ propias +
+          # set del registro). Las de GitHub Actions las aplica el job de integridad.
+          # Si hay codigo en un lenguaje sin reglas, se AVISA: el gate no da un verde enganoso.
+          CONFIGS=$(PYTHONPATH="$AG/src" python -m auditgate.languages --semgrep-configs)
           echo "SEMGREP_CONFIGS=$CONFIGS" >> "$GITHUB_ENV"
+          PYTHONPATH="$AG/src" python -m auditgate.languages --summary >> "$GITHUB_STEP_SUMMARY"
+          PYTHONPATH="$AG/src" python -m auditgate.languages --github
 
       - name: Semgrep — reporte completo (SARIF → Code Scanning)
         run: |
@@ -271,7 +269,6 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   dependencies:
     name: "📦 Dependencies"
-    if: inputs.requirements != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -295,32 +292,23 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
-      - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
-        run: |
-          pin() { grep -E "^$1(\[[^]]*\])?==" "$AG/.github/ci/requirements-ci.txt"; }
-          pipx install "$(pin pip-audit)"
-          pip install "$(pin pip-licenses)"
-      - name: pip-audit diff-aware (gate en PR, reporte en push)
+      - name: Install osv-scanner (version + checksum fijos)
         env:
-          REQS: ${{ inputs.requirements }}
+          OSV_VERSION: "2.7.1"
         run: |
-          read -ra FILES <<< "$REQS"
+          base="https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}"
+          curl -sSfL -o "$RUNNER_TEMP/osv-scanner_linux_amd64" "${base}/osv-scanner_linux_amd64"
+          curl -sSfL -o "$RUNNER_TEMP/osv.sha" "${base}/osv-scanner_SHA256SUMS"
+          (cd "$RUNNER_TEMP" && grep " osv-scanner_linux_amd64$" osv.sha | sha256sum -c -)
+          sudo install -m 0755 "$RUNNER_TEMP/osv-scanner_linux_amd64" /usr/local/bin/osv-scanner
+      - name: osv-scanner diff-aware, multi-lenguaje (gate en PR, reporte en push)
+        run: |
+          # npm, PyPI, Go, Maven, crates.io, RubyGems, Packagist, NuGet... con transitivas.
           if [ "$IS_PR" = "true" ]; then
-            PYTHONPATH="$AG/src" python -m auditgate.depgate --base "$BASE_SHA" "${FILES[@]}"
+            PYTHONPATH="$AG/src" python -m auditgate.depgate --base "$BASE_SHA"
           else
-            PYTHONPATH="$AG/src" python -m auditgate.depgate "${FILES[@]}"
+            PYTHONPATH="$AG/src" python -m auditgate.depgate
           fi
-      - name: Licencias (reporte)
-        env:
-          REQS: ${{ inputs.requirements }}
-        run: |
-          read -ra FILES <<< "$REQS"
-          for r in "${FILES[@]}"; do [ -f "$r" ] && pip install -q -r "$r" || true; done
-          {
-            echo "## 📄 Licencias"; echo '```'
-            pip-licenses --format=plain --order=license
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
 
   # ───────────────────────────────────────────────────────────────────────────
   container:
