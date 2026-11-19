@@ -1,6 +1,6 @@
 [![Security Gate](https://github.com/Jawy77/auditgate/actions/workflows/devsecops-pipeline.yml/badge.svg)](https://github.com/Jawy77/auditgate/actions/workflows/devsecops-pipeline.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Actions pinned by SHA](https://img.shields.io/badge/actions-pinned%20by%20SHA-informational.svg)](rules/github-actions/auditgate-actions.yml)
+[![Actions pinned by SHA](https://img.shields.io/badge/actions-pinned%20by%20SHA-informational.svg)](src/auditgate/rules/github-actions/auditgate-actions.yml)
 [![Releases: SBOM + SLSA + cosign](https://img.shields.io/badge/releases-SBOM%20%C2%B7%20SLSA%20%C2%B7%20cosign-informational.svg)](.github/workflows/release.yml)
 
 <h1 align="center">Auditgate</h1>
@@ -27,7 +27,7 @@ que cada repo hereda) y la metodología **Find → Extract → Codify → Scale*
 | **Find** | Agente | Auditoría semanal con taskflow (map → hunt → refute → extract) → issue `needs-validation` |
 | **Validate** | Humano | Reproduce con PoC. Ningún hallazgo de un agente bloquea sin esto |
 | **Extract** | Humano + agente | Patrón generalizable, no el bug puntual |
-| **Codify** | Regla | Regla Semgrep + fixture con tests en [`rules/`](rules/). El gate exige que pasen |
+| **Codify** | Regla | Regla Semgrep + fixture con tests en [`src/auditgate/rules/`](src/auditgate/rules/). El gate exige que pasen |
 | **Scale** | Plataforma | El reusable workflow lleva la regla a cada repo que lo consume |
 
 ## Qué incluye
@@ -36,15 +36,40 @@ que cada repo hereda) y la metodología **Find → Extract → Codify → Scale*
 |---|---|---|
 | Paved road | [`security-platform.yml`](.github/workflows/security-platform.yml) | Reusable workflow; un repo lo consume con unas 10 líneas |
 | Gate determinista | job `🚦 Security Gate` | Único check requerido. Bloquea solo lo **nuevo** (diff-aware) |
-| Reglas con tests | [`rules/`](rules/) | Python/Flask y supply chain de GitHub Actions |
-| Triage con IA | [`scripts/ai_triage.py`](scripts/ai_triage.py) | Comenta TP/FP, alcanzabilidad y fix en el PR. **Nunca bloquea**. Claude, Grok, OpenAI o compatible |
-| CLI | [`cli/`](cli/auditgate_cli/main.py) | `auditgate init / set-key / doctor`: instala y guarda la llave en el vault |
+| Reglas con tests | [`src/auditgate/rules/`](src/auditgate/rules/) | Python/Flask y supply chain de GitHub Actions |
+| Triage con IA | [`src/auditgate/triage.py`](src/auditgate/triage.py) | Comenta TP/FP, alcanzabilidad y fix en el PR. **Nunca bloquea**. Claude, Grok, OpenAI o compatible |
+| CLI | [`src/auditgate/cli.py`](src/auditgate/cli.py) | `auditgate scan` (el gate en tu máquina) · `init / set-key / doctor` |
 | Agente de auditoría | [`agents/taskflows/`](agents/taskflows/) | La metodología en YAML; el modelo es intercambiable |
 | Sin API keys | [`docs/WIF-SETUP.md`](docs/WIF-SETUP.md) | Los agentes se autentican con el OIDC de GitHub (Workload Identity Federation) |
 | Supply chain | [`release.yml`](.github/workflows/release.yml) | SHA pinning, mínimo privilegio, SBOM, provenance SLSA, cosign keyless |
 | Política | [`SECURITY.md`](SECURITY.md) | Reglas para reportes, incluidos los asistidos por IA |
 
 Arquitectura, política del gate y guardrails de los agentes: [`docs/PLATFORM-V2.md`](docs/PLATFORM-V2.md).
+
+## Dos formas de usarlo, un solo motor
+
+| | Dónde corre | Quién lo ejecuta | Para qué |
+|---|---|---|---|
+| **En el repo** (GitHub Actions) | Servidores de GitHub | GitHub, en cada PR | El gate oficial: **bloquea el merge** |
+| **En tu terminal** (CLI) | Tu máquina | Tú o tu agente (Claude Code, Cursor…) | El **mismo gate antes del push** + instalar y configurar |
+
+El CLI y el workflow ejecutan el mismo código y las mismas reglas: si `auditgate scan` pasa
+en tu máquina, el PR pasa en GitHub.
+
+```bash
+auditgate scan                 # evalúa tus commits nuevos contra la rama base (exit 0 pasa · 1 bloquea · 2 error)
+auditgate scan --json          # salida estructurada para agentes y scripts
+auditgate scan --checks sast   # solo un control: secrets, sast, deps, actions
+```
+
+`scan` corre en un worktree temporal de tu último commit, así que evalúa lo que llegará al PR
+y nunca toca tus archivos. Usa las mismas herramientas que CI, instaladas aparte:
+`brew install gitleaks`, `pipx install semgrep`, `pipx install pip-audit`. Si falta una, ese
+control se omite y lo avisa; con `--strict`, falta = error.
+
+**Para agentes:** agrega a tu `CLAUDE.md` (o equivalente) algo como *"antes de abrir un PR,
+corre `auditgate scan --json` y corrige todo lo que tenga `status: blocked`"*. El agente
+recibe la misma política que el gate y no puede saltársela: el merge lo sigue decidiendo CI.
 
 ## Empezar en 1 minuto
 

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import llm
+from auditgate import llm
 
 SCHEMA = {
     "type": "object",
@@ -72,7 +72,7 @@ def test_grok_strict_schema_first(monkeypatch):
     monkeypatch.setenv("AUDITGATE_LLM_MODEL", "grok-test")
     monkeypatch.setenv("AUDITGATE_LLM_API_KEY", "secret-key")
     calls = []
-    import llm_openai_compat as mod
+    from auditgate import llm_openai_compat as mod
 
     class Completions:
         def create(self, **kwargs):
@@ -99,7 +99,7 @@ def test_degrades_when_endpoint_lacks_json_schema(monkeypatch):
     monkeypatch.setenv("AUDITGATE_LLM_PROVIDER", "openai-compatible")
     monkeypatch.setenv("AUDITGATE_LLM_MODEL", "llama3")
     monkeypatch.setenv("AUDITGATE_LLM_BASE_URL", "http://localhost:11434/v1")
-    import llm_openai_compat as mod
+    from auditgate import llm_openai_compat as mod
 
     calls = []
     answers = [FakeBadRequest("no json_schema"), FakeBadRequest("no json_object"),
@@ -131,7 +131,7 @@ def test_invalid_json_from_model_is_rejected(monkeypatch):
     monkeypatch.setenv("AUDITGATE_LLM_MODEL", "m")
     monkeypatch.setenv("AUDITGATE_LLM_API_KEY", "k")
     import jsonschema
-    import llm_openai_compat as mod
+    from auditgate import llm_openai_compat as mod
 
     class FakeClient:
         def __init__(self, **kwargs):
@@ -146,7 +146,7 @@ def test_invalid_json_from_model_is_rejected(monkeypatch):
 
 def test_claude_with_user_key_uses_official_sdk(monkeypatch):
     monkeypatch.setenv("AUDITGATE_LLM_API_KEY", "sk-test")
-    import llm_anthropic as mod
+    from auditgate import llm_anthropic as mod
 
     seen = {}
 

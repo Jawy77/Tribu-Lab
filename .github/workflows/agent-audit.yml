@@ -61,7 +61,7 @@ jobs:
           AUDITGATE_LLM_API_KEY: ${{ secrets.AUDITGATE_LLM_API_KEY }}
         run: |
           # Sin llave ni WIF, el script avisa y sale en 0 sin generar audit.md.
-          python scripts/agent_audit.py "$TASKFLOW" --out audit.md --json-out audit.json
+          PYTHONPATH=src python -m auditgate.audit "$TASKFLOW" --out audit.md --json-out audit.json
           [ -f audit.md ] && cat audit.md >> "$GITHUB_STEP_SUMMARY" || true
       - name: Abrir issue para validacion humana
         if: hashFiles('audit.md') != ''

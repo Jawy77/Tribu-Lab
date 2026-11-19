@@ -1,4 +1,5 @@
-# Fixtures intencionalmente vulnerables (se prueban con `semgrep --test rules/`)
+# Fixtures intencionalmente vulnerables (se prueban con `semgrep --test`)
+src/auditgate/rules/
 rules/
 tests/
 .git/

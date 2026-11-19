@@ -27,7 +27,7 @@ v2 aplica dos ideas:
   dependencies ──┤ pip-audit diff-aware                      ├──► 🚦 security-gate ──► merge
   container ─────┤ Trivy CRITICAL con fix + Hadolint         │      (único check requerido)
   iac ───────────┤ Checkov (reporte)                         │
-  integrity ─────┤ semgrep --test rules/ + self-audit + pytest│
+  integrity ─────┤ semgrep --test (reglas) + self-audit + pytest│
                  └───────────────────────────────────────────┘
                      │ SARIF → Code Scanning (alertas en el PR)
                      ▼
@@ -36,7 +36,7 @@ v2 aplica dos ideas:
 
   agent-audit (semanal) ──► issue `needs-validation` ──► humano valida (PoC)
         FIND                                                │
-                                         EXTRACT + CODIFY ◄─┘  regla en rules/ + fixture
+                                         EXTRACT + CODIFY ◄─┘  regla + fixture con tests
                                                 │
                                           SCALE ▼  el reusable workflow la lleva a todos los repos
 
@@ -80,13 +80,13 @@ estricto se puede adoptar en repos con historia. La deuda se paga con Dependabot
 1. **Find**: `agent-audit` o un pentest encuentra algo y abre un issue `needs-validation`.
 2. **Validate (HITL)**: un humano lo reproduce con PoC.
 3. **Extract**: se describe el patrón generalizable.
-4. **Codify**: regla en `rules/<lang>/*.yml` más un fixture con `# ruleid:` / `# ok:`.
-   `semgrep --test rules/` debe pasar (el gate lo exige).
+4. **Codify**: regla en `src/auditgate/rules/<lang>/*.yml` (o en `rules/` de tu repo) más un fixture con `# ruleid:` / `# ok:`.
+   `semgrep --test` debe pasar (el gate lo exige).
 5. **Scale**: al hacer merge, todos los repos que consumen `security-platform.yml`
    detectan variantes del patrón en su siguiente PR.
 
 Ejemplo real en este repo: las 7 vulnerabilidades de `vulnerable_app/app.py`
-(el *Find*) se codificaron en `rules/python/auditgate-flask.yml`. Esas reglas detectan las
+(el *Find*) se codificaron en `src/auditgate/rules/python/auditgate-flask.yml`. Esas reglas detectan las
 7, con 0 falsos positivos en `app_secure.py`: las dos excepciones están revisadas y
 documentadas con `nosemgrep` + justificación.
 

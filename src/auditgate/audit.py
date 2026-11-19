@@ -11,7 +11,7 @@ Nada de esto bloquea un merge. El circuito se cierra cuando un humano valida un
 candidato y lo codifica como regla determinista en rules/ (con fixture de test).
 
 Uso:
-    python scripts/agent_audit.py agents/taskflows/audit-critical-paths.yml --out audit.md
+    python -m auditgate.audit agents/taskflows/audit-critical-paths.yml --out audit.md
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from llm import LLMConfigError, complete_json, has_credentials, load_config
+from auditgate.llm import LLMConfigError, complete_json, has_credentials, load_config
 
 SYSTEM_PROMPT = """\
 Eres un auditor de seguridad ofensiva revisando codigo e infraestructura de un \
@@ -109,8 +109,8 @@ def render(flow: dict, results: dict) -> str:
     out += [
         "",
         "---",
-        "**Siguiente paso (HITL):** validar con PoC → mover la regla a `rules/` con su",
-        "fixture → `semgrep --test rules/` en verde → el reusable workflow la escala a todos los repos.",
+        "**Siguiente paso (HITL):** validar con PoC → mover la regla a `src/auditgate/rules/` (o `rules/` de tu repo) con su",
+        "fixture → `semgrep --test` en verde → el reusable workflow la escala a todos los repos.",
     ]
     return "\n".join(out)
 

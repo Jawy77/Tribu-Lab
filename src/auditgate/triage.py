@@ -20,7 +20,7 @@ Guardrails:
     Con Claude puede no haber llave: Workload Identity Federation (OIDC).
 
 Uso:
-    python scripts/ai_triage.py --sarif-dir sarif/ --base <sha> --out triage.md
+    python -m auditgate.triage --sarif-dir sarif/ --base <sha> --out triage.md
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from llm import LLMConfigError, complete_json, has_credentials, load_config
+from auditgate.llm import LLMConfigError, complete_json, has_credentials, load_config
 MAX_FINDINGS = 40
 CONTEXT_LINES = 12
 

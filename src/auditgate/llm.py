@@ -95,9 +95,9 @@ def complete_json(
 ) -> dict:
     """Una llamada sin tools que devuelve JSON valido contra `schema`."""
     if cfg.provider == "anthropic":
-        from llm_anthropic import complete_json as impl
+        from auditgate.llm_anthropic import complete_json as impl
     else:
-        from llm_openai_compat import complete_json as impl
+        from auditgate.llm_openai_compat import complete_json as impl
     result = impl(cfg, system, user, schema, schema_name=schema_name, effort=effort, long_running=long_running)
     validate(result, schema)
     return result

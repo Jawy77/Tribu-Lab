@@ -5,7 +5,7 @@ import json
 
 import anthropic
 
-from gha_oidc import refresh_identity_token
+from auditgate.gha_oidc import refresh_identity_token
 
 
 def complete_json(cfg, system: str, user: str, schema: dict, *, schema_name: str, effort: str, long_running: bool) -> dict:

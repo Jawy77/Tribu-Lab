@@ -1,5 +1,6 @@
 # La plataforma de seguridad tiene duenos: cambios aqui requieren review.
 /.github/                @Jawy77
+/src/                    @Jawy77
 /rules/                  @Jawy77
 /agents/                 @Jawy77
 /scripts/                @Jawy77
