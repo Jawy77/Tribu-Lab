@@ -72,11 +72,11 @@ def test_scan_reports_coverage_and_strict_fails_on_uncovered(poly, monkeypatch):
     real_run = subprocess.run
 
     def fake_run(cmd, **kw):
-        if cmd[0] == "semgrep":
+        if Path(cmd[0]).name == "opengrep":
             return subprocess.CompletedProcess(cmd, 0, stdout='{"results": [], "errors": []}', stderr="")
         return real_run(cmd, **kw)
 
-    monkeypatch.setattr(scan.shutil, "which", lambda t: f"/usr/bin/{t}")
+    monkeypatch.setattr(scan, "find_tool", lambda t: f"/usr/bin/{t}")
     monkeypatch.setattr(scan.subprocess, "run", fake_run)
     report = scan.run_scan(poly, base="main", checks=("sast",))
     assert report["gate"] == "passed"  # no bloquea, pero lo dice

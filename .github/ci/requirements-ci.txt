@@ -1,7 +1,7 @@
-# Herramientas del pipeline con version fija (Dependabot las actualiza con cooldown).
-# Se instalan AISLADAS (pipx) por job: semgrep, checkov y pip-audit tienen dependencias incompatibles entre si.
+# Herramientas Python del pipeline con version fija (Dependabot las actualiza con cooldown).
+# Los motores de escaneo (opengrep, gitleaks, osv-scanner) NO van aqui: son binarios con
+# version y SHA-256 fijados en src/auditgate/tools.json (los instala `auditgate setup`).
 # Una herramienta de seguridad sin pin es un vector de supply chain.
-semgrep==1.185.0
 bandit[sarif]==1.9.4
 checkov==3.4.5
 pytest==9.2.0

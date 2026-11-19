@@ -31,6 +31,12 @@ from pathlib import Path
 TOOL = "osv-scanner"
 
 
+def _tool() -> str | None:
+    from auditgate.tools import resolve
+
+    return resolve(TOOL)
+
+
 def osv_scan(directory: str | Path) -> list[dict]:
     """Vulnerabilidades del directorio, una por grupo de alias (CVE = GHSA = PYSEC cuentan como una).
 
@@ -38,7 +44,7 @@ def osv_scan(directory: str | Path) -> list[dict]:
     """
     directory = Path(directory).resolve()
     proc = subprocess.run(
-        [TOOL, "scan", "source", "-r", str(directory), "--format", "json",
+        [_tool() or TOOL, "scan", "source", "-r", str(directory), "--format", "json",
          "--allow-no-lockfiles", "--no-call-analysis=all"],
         capture_output=True, text=True, check=False,
     )
@@ -123,8 +129,8 @@ def main() -> int:
     ap.add_argument("legacy_files", nargs="*", help=argparse.SUPPRESS)  # compat: antes recibia requirements
     args = ap.parse_args()
 
-    if not shutil.which(TOOL):
-        print(f"✖ {TOOL} no está instalado.", file=sys.stderr)
+    if not _tool():
+        print(f"✖ {TOOL} no está instalado. Corre `auditgate setup`.", file=sys.stderr)
         return 2
     root = Path(args.root).resolve()
     # HEAD y BASE se materializan en worktrees temporales: se escanea solo lo

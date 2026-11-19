@@ -28,14 +28,12 @@ from pathlib import Path
 from auditgate import __version__
 from auditgate.languages import sast_plan
 from auditgate.project import unpinned_actions
+from auditgate.tools import resolve as find_tool
 
 ALL_CHECKS = ("secrets", "sast", "deps", "actions")
 
-INSTALL_HINTS = {
-    "gitleaks": "brew install gitleaks  (o https://github.com/gitleaks/gitleaks#installing)",
-    "semgrep": "pipx install semgrep",
-    "osv-scanner": "brew install osv-scanner  (o https://google.github.io/osv-scanner/installation/)",
-}
+# Un solo comando instala todos los motores, con version y hash verificados.
+INSTALL_HINT = "corre `auditgate setup`"
 
 EXIT_PASSED, EXIT_BLOCKED, EXIT_ERROR = 0, 1, 2
 
@@ -88,19 +86,20 @@ def resolve_base(repo: Path, base: str | None) -> str:
 # ── checks ───────────────────────────────────────────────────────────────────
 def _missing(check: Check, tool: str) -> Check:
     check.status = "skipped"
-    check.detail = f"{tool} no está instalado → {INSTALL_HINTS[tool]}"
+    check.detail = f"{tool} no está instalado → {INSTALL_HINT}"
     return check
 
 
 def check_secrets(wt: Path, merge_base: str, head: str) -> Check:
     check = Check("secrets", "gitleaks")
-    if not shutil.which("gitleaks"):
+    gitleaks = find_tool("gitleaks")
+    if not gitleaks:
         return _missing(check, "gitleaks")
     if merge_base == head:
         check.detail = "sin commits nuevos respecto a la base"
         return check
     report = wt / ".auditgate-gitleaks.json"
-    cmd = ["gitleaks", "git", "--log-opts", f"{merge_base}..{head}", "--redact", "--no-banner",
+    cmd = [gitleaks, "git", "--log-opts", f"{merge_base}..{head}", "--redact", "--no-banner",
            "--report-format", "json", "--report-path", str(report), "--exit-code", "0"]
     if (wt / ".gitleaks.toml").is_file():
         cmd += ["--config", str(wt / ".gitleaks.toml")]
@@ -118,22 +117,27 @@ def check_secrets(wt: Path, merge_base: str, head: str) -> Check:
 
 def check_sast(wt: Path, merge_base: str, head: str, use_registry: bool) -> tuple[Check, dict]:
     """SAST con reglas para cada lenguaje detectado. Devuelve tambien el plan de cobertura."""
-    check = Check("sast", "semgrep")
     plan = sast_plan(wt, use_registry)
-    if not shutil.which("semgrep"):
-        return _missing(check, "semgrep"), plan
+    # Motor: Opengrep (binario unico, LGPL). Semgrep sirve igual si ya lo tienes:
+    # mismas reglas, mismos resultados (verificado: hallazgos identicos).
+    engine_name = "opengrep" if find_tool("opengrep") else "semgrep"
+    engine = find_tool(engine_name)
+    check = Check("sast", engine_name if engine else "opengrep")
+    if not engine:
+        return _missing(check, "opengrep"), plan
     # Las reglas de GitHub Actions las aplica el check `actions` (respeta --no-enforce-pins);
     # aqui solo van las de codigo, para no duplicar ni saltarse esa politica.
     configs = [arg for c in plan["configs"] for arg in ("--config", c)]
-    cmd = ["semgrep", "scan", *configs, "--metrics=off", "--severity", "ERROR", "--json",
-           "--exclude", ".auditgate"]
+    cmd = [engine, "scan", *configs, "--severity", "ERROR", "--json", "--exclude", ".auditgate"]
+    if engine_name == "semgrep":
+        cmd.append("--metrics=off")  # opengrep no tiene telemetria (ni esta opcion)
     if merge_base != head:
         cmd += ["--baseline-commit", merge_base]
     proc = subprocess.run(cmd, cwd=wt, capture_output=True, text=True)
     try:
         data = json.loads(proc.stdout)
     except json.JSONDecodeError:
-        check.status, check.detail = "error", f"semgrep falló: {proc.stderr.strip()[-300:]}"
+        check.status, check.detail = "error", f"{engine_name} falló: {proc.stderr.strip()[-300:]}"
         return check, plan
     fatal = [e for e in data.get("errors", []) if e.get("level") == "error"]
     for r in data.get("results", []):
@@ -144,7 +148,7 @@ def check_sast(wt: Path, merge_base: str, head: str, use_registry: bool) -> tupl
                                       r["extra"].get("message", "").strip()[:240]))
     if fatal and not check.findings:
         check.status = "error"
-        check.detail = f"semgrep: {fatal[0].get('message', '')[:240]}"
+        check.detail = f"{engine_name}: {fatal[0].get('message', '')[:240]}"
         return check, plan
     check.status = "blocked" if check.findings else "passed"
     notes = []
@@ -158,7 +162,7 @@ def check_sast(wt: Path, merge_base: str, head: str, use_registry: bool) -> tupl
 
 def check_deps(head_wt: Path, base_wt: Path | None) -> Check:
     check = Check("deps", "osv-scanner")
-    if not shutil.which("osv-scanner"):
+    if not find_tool("osv-scanner"):
         return _missing(check, "osv-scanner")
     from auditgate.depgate import evaluate
 

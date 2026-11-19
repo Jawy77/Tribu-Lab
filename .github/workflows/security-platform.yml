@@ -143,15 +143,8 @@ jobs:
             .github/ci
       - run: echo ".auditgate/" >> .git/info/exclude
 
-      - name: Install gitleaks (version + checksum fijos)
-        env:
-          GL_VERSION: "8.30.1"
-        run: |
-          base="https://github.com/gitleaks/gitleaks/releases/download/v${GL_VERSION}"
-          curl -sSfL -o "$RUNNER_TEMP/gl.tgz" "${base}/gitleaks_${GL_VERSION}_linux_x64.tar.gz"
-          curl -sSfL -o "$RUNNER_TEMP/gl.sha" "${base}/gitleaks_${GL_VERSION}_checksums.txt"
-          (cd "$RUNNER_TEMP" && grep "linux_x64.tar.gz" gl.sha | awk '{print $1"  gl.tgz"}' | sha256sum -c -)
-          tar -xzf "$RUNNER_TEMP/gl.tgz" -C "$RUNNER_TEMP" gitleaks && sudo mv "$RUNNER_TEMP/gitleaks" /usr/local/bin/
+      - name: Motores (version + SHA-256 fijados en src/auditgate/tools.json)
+        run: PYTHONPATH="$AG/src" python3 -m auditgate.tools install gitleaks
 
       - name: Gitleaks — commits del PR (gate) / historial (reporte)
         run: |
@@ -214,10 +207,11 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
-      - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
+      - name: Motores (version + SHA-256 fijados en src/auditgate/tools.json)
         run: |
+          # El mismo instalador y manifiesto que `auditgate setup`: CI y tu maquina corren lo mismo.
+          PYTHONPATH="$AG/src" python -m auditgate.tools install opengrep
           pin() { grep -E "^$1(\[[^]]*\])?==" "$AG/.github/ci/requirements-ci.txt"; }
-          pipx install "$(pin semgrep)"
           pipx install "$(pin bandit)"
 
       - name: Lenguajes del repo → reglas a aplicar y cobertura
@@ -230,28 +224,28 @@ jobs:
           PYTHONPATH="$AG/src" python -m auditgate.languages --summary >> "$GITHUB_STEP_SUMMARY"
           PYTHONPATH="$AG/src" python -m auditgate.languages --github
 
-      - name: Semgrep — reporte completo (SARIF → Code Scanning)
+      - name: SAST — reporte completo (SARIF → Code Scanning)
         run: |
           read -ra CONFIGS <<< "$SEMGREP_CONFIGS --config p/secrets"
-          semgrep scan "${CONFIGS[@]}" --exclude "$AG" --metrics=off --sarif -o semgrep.sarif || true
+          opengrep scan "${CONFIGS[@]}" --exclude "$AG" --sarif -o sast.sarif || true
           # `|| true` SOLO en el reporte: el gate es el paso siguiente.
 
-      - name: Semgrep — gate diff-aware (solo hallazgos ERROR nuevos)
+      - name: SAST — gate diff-aware (solo hallazgos ERROR nuevos)
         if: env.IS_PR == 'true'
         run: |
           read -ra CONFIGS <<< "$SEMGREP_CONFIGS"
-          semgrep scan "${CONFIGS[@]}" --exclude "$AG" --metrics=off --severity ERROR \
+          opengrep scan "${CONFIGS[@]}" --exclude "$AG" --severity ERROR \
             --baseline-commit "$BASE_SHA" --error
 
       - name: Bandit — reporte (SARIF)
         run: bandit -r . -x "./tests,./rules,./.venv,./$AG" -f sarif -o bandit.sarif --exit-zero
 
-      - name: Upload SARIF (Semgrep)
-        if: always() && hashFiles('semgrep.sarif') != ''
+      - name: Upload SARIF (SAST)
+        if: always() && hashFiles('sast.sarif') != ''
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
-          sarif_file: semgrep.sarif
-          category: semgrep
+          sarif_file: sast.sarif
+          category: sast
       - name: Upload SARIF (Bandit)
         if: always() && hashFiles('bandit.sarif') != ''
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
@@ -292,15 +286,8 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
-      - name: Install osv-scanner (version + checksum fijos)
-        env:
-          OSV_VERSION: "2.7.1"
-        run: |
-          base="https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}"
-          curl -sSfL -o "$RUNNER_TEMP/osv-scanner_linux_amd64" "${base}/osv-scanner_linux_amd64"
-          curl -sSfL -o "$RUNNER_TEMP/osv.sha" "${base}/osv-scanner_SHA256SUMS"
-          (cd "$RUNNER_TEMP" && grep " osv-scanner_linux_amd64$" osv.sha | sha256sum -c -)
-          sudo install -m 0755 "$RUNNER_TEMP/osv-scanner_linux_amd64" /usr/local/bin/osv-scanner
+      - name: Motores (version + SHA-256 fijados en src/auditgate/tools.json)
+        run: PYTHONPATH="$AG/src" python -m auditgate.tools install osv-scanner
       - name: osv-scanner diff-aware, multi-lenguaje (gate en PR, reporte en push)
         run: |
           # npm, PyPI, Go, Maven, crates.io, RubyGems, Packagist, NuGet... con transitivas.
@@ -447,25 +434,25 @@ jobs:
           python-version: ${{ inputs.python-version }}
       - name: Instalar herramientas (aisladas con pipx; versiones de requirements-ci.txt)
         run: |
+          PYTHONPATH="$AG/src" python -m auditgate.tools install opengrep
           pin() { grep -E "^$1(\[[^]]*\])?==" "$AG/.github/ci/requirements-ci.txt"; }
-          pipx install "$(pin semgrep)"
           pip install "$(pin pytest)" "$(pin jsonschema)" "$(pin anthropic)" "$(pin openai)" "$(pin pyyaml)"
 
       - name: Las reglas de Auditgate tienen tests y pasan
-        run: semgrep --test --metrics=off "$AG/src/auditgate/rules/"
+        run: opengrep --test "$AG/src/auditgate/rules/"
 
       - name: Las reglas propias del repo tienen tests y pasan (Codify)
         if: hashFiles('rules/**') != ''
-        run: semgrep --test --metrics=off rules/
+        run: opengrep --test rules/
 
       - name: El pipeline se audita a si mismo (actions por SHA, sin pwn-request)
         if: hashFiles('.github/workflows/**') != ''
         env:
           ENFORCE: ${{ inputs.enforce-pinned-actions }}
         run: |
-          FLAGS=(--config "$AG/src/auditgate/rules/github-actions/" --metrics=off --include '.github/workflows/*')
+          FLAGS=(--config "$AG/src/auditgate/rules/github-actions/" --include '.github/workflows/*')
           [ "$ENFORCE" = "true" ] && FLAGS+=(--error)
-          semgrep scan "${FLAGS[@]}" .github/workflows/
+          opengrep scan "${FLAGS[@]}" .github/workflows/
 
       - name: Tests de seguridad (pytest)
         if: inputs.tests-path != ''

@@ -1,6 +1,7 @@
 """
 auditgate — instala y configura Auditgate en un repo de GitHub.
 
+    auditgate setup       instala los motores de escaneo (hash verificado)
     auditgate scan        corre el gate en tu maquina (el mismo del PR)
     auditgate init        instala el workflow y configura el modelo + la llave
     auditgate set-key     guarda o rota la llave del modelo en el vault
@@ -297,12 +298,53 @@ def cmd_doctor(args) -> int:
             print(f"      {'✔' if src else '✖'} {lang} ({n} archivos): {', '.join(src) if src else 'SIN REGLAS'}")
         check(not plan["uncovered"], "todo el código tiene reglas de SAST",
               f"sin reglas de SAST: {', '.join(plan['uncovered'])} (el gate no revisa ese código)")
-    for tool in ("semgrep", "gitleaks", "osv-scanner"):
-        found = bool(shutil.which(tool))
-        print(f"  {'✔' if found else '–'} {tool} "
-              f"{'instalado' if found else 'no instalado (solo afecta a `auditgate scan` local)'}")
+    from auditgate import tools
+
+    print("  • Motores para `auditgate scan` (en GitHub se instalan solos):")
+    for row in tools.status():
+        if row["managed"]:
+            state = f"✔ {row['version']} verificado"
+        elif row["path"]:
+            state = f"– en el PATH, versión sin verificar ({row['path']})"
+        else:
+            state = "✖ falta → auditgate setup"
+        print(f"      {row['name']:<12} {row['purpose']:<13} {state}")
     print("\nTodo en orden." if ok else "\nHay puntos por corregir.")
     return 0 if ok else 1
+
+
+def cmd_setup(args) -> int:
+    from auditgate import tools
+
+    manifest = tools.load_manifest()
+    if args.check:
+        print(f"Motores de Auditgate ({tools.home()}):")
+        missing = 0
+        for row in tools.status():
+            state = (f"✔ {row['version']} verificado" if row["managed"]
+                     else f"– en el PATH sin verificar: {row['path']}" if row["path"] else "✖ falta")
+            missing += not row["managed"]
+            print(f"  {row['name']:<12} {row['purpose']:<13} {state}")
+        if missing:
+            print("\nCorre `auditgate setup` para instalar las versiones fijadas y verificadas.")
+        return 1 if missing else 0
+
+    names = [n.strip() for n in args.tools.split(",")] if args.tools else list(manifest)
+    print(f"Instalando motores en {tools.home()} ({tools.platform_key()}):")
+    try:
+        for name in names:
+            spec = manifest.get(name)
+            if not spec:
+                raise tools.ToolError(f"Motor desconocido: {name}. Disponibles: {', '.join(manifest)}")
+            print(f"  • {name} {spec['version']} ({spec['purpose']}, {spec['license']})")
+            path, downloaded = tools.install(name, force=args.force)
+            verb = "descargado, SHA-256 verificado" if downloaded else "ya instalado"
+            print(f"    ✔ {verb} — {tools.smoke_test(path)}")
+    except tools.ToolError as exc:
+        print(f"✖ {exc}", file=sys.stderr)
+        return 2
+    print("\nListo. `auditgate scan` usa estos motores (los mismos, con las mismas versiones, que GitHub).")
+    return 0
 
 
 def cmd_scan(args) -> int:
@@ -347,6 +389,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--strict", action="store_true",
                    help="herramienta faltante o lenguaje sin reglas de SAST = error (exit 2)")
     p.set_defaults(func=cmd_scan)
+
+    p = sub.add_parser(
+        "setup",
+        help="instala los motores de escaneo (versiones fijadas, hash verificado)",
+        description="Descarga opengrep, gitleaks y osv-scanner de sus releases oficiales, verifica su "
+                    "SHA-256 contra el manifiesto de Auditgate y los deja en ~/.auditgate. "
+                    "No necesita sudo, Docker ni Python extra.",
+    )
+    p.add_argument("--tools", help="subconjunto, p. ej. gitleaks,osv-scanner (default: todos)")
+    p.add_argument("--check", action="store_true", help="solo muestra qué está instalado")
+    p.add_argument("--force", action="store_true", help="reinstala aunque ya exista")
+    p.set_defaults(func=cmd_setup)
 
     p = sub.add_parser("init", help="instala Auditgate en el repo actual")
     p.add_argument("--repo", help="owner/nombre (por defecto, el repo actual)")
