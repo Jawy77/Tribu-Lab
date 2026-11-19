@@ -1,7 +1,7 @@
 # Política de seguridad
 
 > Este repositorio contiene **código intencionalmente vulnerable** en `vulnerable_app/app.py`
-> y fixtures en `rules/` con fines educativos. Esas vulnerabilidades **no** se reportan.
+> y fixtures en `src/auditgate/rules/` con fines educativos. Esas vulnerabilidades **no** se reportan.
 
 ## Reportar una vulnerabilidad
 
@@ -17,7 +17,7 @@ Se aceptan reportes generados con ayuda de IA **solo si** cumplen todo esto:
 3. **Impacto concreto**: qué puede hacer un atacante y bajo qué condiciones.
 4. **Validado por un humano**: confirma que reprodujiste el hallazgo.
    Pegar la salida cruda de un scanner o de un LLM sin validar **no es un reporte**.
-5. **Fuera de alcance**: `vulnerable_app/app.py`, `rules/**`, fixtures de `skills/**/evals/`.
+5. **Fuera de alcance**: `vulnerable_app/app.py`, `src/auditgate/rules/**`, fixtures de `skills/**/evals/`.
 
 Los reportes que no cumplan se cierran sin respuesta detallada.
 
@@ -30,5 +30,5 @@ Los reportes que no cumplan se cierran sin respuesta detallada.
 | Fix + advisory | según severidad, coordinado con quien reporta |
 
 Quien reporta puede ayudar a revisar el parche. Cada hallazgo confirmado se
-convierte en una regla determinista en `rules/` (*Extract → Codify → Scale*), así
+convierte en una regla determinista en `src/auditgate/rules/` (*Extract → Codify → Scale*), así
 el mismo patrón no vuelve a entrar.

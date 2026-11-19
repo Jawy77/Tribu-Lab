@@ -4,22 +4,31 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "auditgate-ci"
-version = "0.1.0"
-description = "CLI de Auditgate: instala un gate de seguridad determinista + agentes de IA (Claude, Grok, OpenAI...) en tu repo de GitHub."
+version = "0.2.0"
+description = "Gate de seguridad determinista + agentes de IA (Claude, Grok, OpenAI...): el mismo motor en GitHub Actions y en tu terminal."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Jawy Romero (Mantishield)" }]
 keywords = ["devsecops", "security", "github-actions", "semgrep", "supply-chain", "ai-agents"]
-dependencies = []  # solo libreria estandar + GitHub CLI (`gh`)
+# El CLI (init, scan, doctor) solo usa la libreria estandar. Las herramientas de
+# escaneo (semgrep, gitleaks, pip-audit) se instalan aparte y aisladas, igual que en CI.
+dependencies = []
+
+[project.optional-dependencies]
+ai = ["anthropic>=2.9", "openai>=3.54", "jsonschema>=4.26"]   # triage / audit con modelos
+audit = ["pyyaml>=6.0"]
 
 [project.urls]
 Homepage = "https://github.com/Jawy77/auditgate"
 Issues = "https://github.com/Jawy77/auditgate/issues"
 
 [project.scripts]
-auditgate = "auditgate_cli.main:main"
+auditgate = "auditgate.cli:main"
 
 [tool.setuptools]
-package-dir = { "" = "cli" }
-packages = ["auditgate_cli"]
+package-dir = { "" = "src" }
+packages = ["auditgate"]
+
+[tool.setuptools.package-data]
+auditgate = ["rules/**/*"]

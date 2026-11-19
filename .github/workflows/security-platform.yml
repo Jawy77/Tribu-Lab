@@ -139,8 +139,7 @@ jobs:
           path: .auditgate
           persist-credentials: false
           sparse-checkout: |
-            scripts
-            rules
+            src
             .github/ci
       - run: echo ".auditgate/" >> .git/info/exclude
 
@@ -209,8 +208,7 @@ jobs:
           path: .auditgate
           persist-credentials: false
           sparse-checkout: |
-            scripts
-            rules
+            src
             .github/ci
       - run: echo ".auditgate/" >> .git/info/exclude
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -224,11 +222,14 @@ jobs:
 
       - name: Reglas a aplicar (Auditgate + las propias del repo)
         run: |
-          CONFIGS="--config p/python --config $AG/rules/"
+          # Reglas de codigo de Auditgate. Las de GitHub Actions las aplica el job de integridad,
+          # que respeta enforce-pinned-actions (si fueran aqui, SAST bloquearia igual).
+          CONFIGS="--config p/python"
+          for d in "$AG"/src/auditgate/rules/*/; do
+            [ "$(basename "$d")" = "github-actions" ] || CONFIGS="$CONFIGS --config $d"
+          done
           # Reglas codificadas por el propio equipo (Find → Extract → Codify en su repo)
-          if [ -d rules ] && [ "$GITHUB_REPOSITORY" != "$PLATFORM_REPO" ]; then
-            CONFIGS="$CONFIGS --config rules/"
-          fi
+          [ -d rules ] && CONFIGS="$CONFIGS --config rules/"
           echo "SEMGREP_CONFIGS=$CONFIGS" >> "$GITHUB_ENV"
 
       - name: Semgrep — reporte completo (SARIF → Code Scanning)
@@ -288,7 +289,7 @@ jobs:
           path: .auditgate
           persist-credentials: false
           sparse-checkout: |
-            scripts
+            src
             .github/ci
       - run: echo ".auditgate/" >> .git/info/exclude
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -305,9 +306,9 @@ jobs:
         run: |
           read -ra FILES <<< "$REQS"
           if [ "$IS_PR" = "true" ]; then
-            python "$AG/scripts/dep_gate.py" --base "$BASE_SHA" "${FILES[@]}"
+            PYTHONPATH="$AG/src" python -m auditgate.depgate --base "$BASE_SHA" "${FILES[@]}"
           else
-            python "$AG/scripts/dep_gate.py" "${FILES[@]}"
+            PYTHONPATH="$AG/src" python -m auditgate.depgate "${FILES[@]}"
           fi
       - name: Licencias (reporte)
         env:
@@ -451,7 +452,7 @@ jobs:
           path: .auditgate
           persist-credentials: false
           sparse-checkout: |
-            rules
+            src
             .github/ci
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -462,7 +463,10 @@ jobs:
           pipx install "$(pin semgrep)"
           pip install "$(pin pytest)" "$(pin jsonschema)" "$(pin anthropic)" "$(pin openai)" "$(pin pyyaml)"
 
-      - name: Las reglas del repo tienen tests y pasan (Codify)
+      - name: Las reglas de Auditgate tienen tests y pasan
+        run: semgrep --test --metrics=off "$AG/src/auditgate/rules/"
+
+      - name: Las reglas propias del repo tienen tests y pasan (Codify)
         if: hashFiles('rules/**') != ''
         run: semgrep --test --metrics=off rules/
 
@@ -471,7 +475,7 @@ jobs:
         env:
           ENFORCE: ${{ inputs.enforce-pinned-actions }}
         run: |
-          FLAGS=(--config "$AG/rules/github-actions/" --metrics=off --include '.github/workflows/*')
+          FLAGS=(--config "$AG/src/auditgate/rules/github-actions/" --metrics=off --include '.github/workflows/*')
           [ "$ENFORCE" = "true" ] && FLAGS+=(--error)
           semgrep scan "${FLAGS[@]}" .github/workflows/
 
@@ -523,7 +527,7 @@ jobs:
           path: .auditgate
           persist-credentials: false
           sparse-checkout: |
-            scripts
+            src
             .github/ci
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -550,7 +554,7 @@ jobs:
         env:
           # La llave solo existe en este paso (GitHub la enmascara en los logs).
           AUDITGATE_LLM_API_KEY: ${{ secrets.AUDITGATE_LLM_API_KEY }}
-        run: python "$AG/scripts/ai_triage.py" --sarif-dir sarif --base "$BASE_SHA" --out triage.md
+        run: PYTHONPATH="$AG/src" python -m auditgate.triage --sarif-dir sarif --base "$BASE_SHA" --out triage.md
       - name: Comentar en el PR (actualiza el comentario previo)
         if: hashFiles('triage.md') != ''
         env:

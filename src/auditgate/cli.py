@@ -1,6 +1,7 @@
 """
 auditgate — instala y configura Auditgate en un repo de GitHub.
 
+    auditgate scan        corre el gate en tu maquina (el mismo del PR)
     auditgate init        instala el workflow y configura el modelo + la llave
     auditgate set-key     guarda o rota la llave del modelo en el vault
     auditgate doctor      revisa que todo este bien configurado
@@ -17,12 +18,13 @@ from __future__ import annotations
 
 import argparse
 import getpass
-import glob
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from auditgate.project import detect_project, unpinned_actions
 
 PLATFORM_REPO = "Jawy77/auditgate"
 ENVIRONMENT = "auditgate"
@@ -70,39 +72,6 @@ def resolve_platform_sha(ref: str) -> str:
     if proc.returncode != 0 or len(sha) != 40:
         raise CLIError(f"No pude resolver '{ref}' en {PLATFORM_REPO} a un SHA.")
     return sha
-
-
-# ── detección del proyecto ───────────────────────────────────────────────────
-def detect_project(root: Path) -> dict:
-    skip = (".venv", "venv", "node_modules", ".auditgate", ".git")
-    reqs = sorted(
-        p for p in glob.glob(str(root / "**/requirements*.txt"), recursive=True)
-        if not any(part in skip for part in Path(p).relative_to(root).parts)
-    )
-    dockerfile = "Dockerfile" if (root / "Dockerfile").is_file() else ""
-    tf_dirs = sorted({
-        str(Path(p).parent.relative_to(root))
-        for p in glob.glob(str(root / "**/*.tf"), recursive=True)
-        if not any(part in skip for part in Path(p).relative_to(root).parts)
-    })
-    return {
-        "requirements": " ".join(str(Path(r).relative_to(root)) for r in reqs),
-        "dockerfile": dockerfile,
-        "iac_dir": tf_dirs[0] if tf_dirs else "",
-    }
-
-
-def unpinned_actions(root: Path) -> list[str]:
-    import re
-
-    pattern = re.compile(r"uses:\s*[\"']?(?!\./|docker://)([\w.-]+/[\w./-]+)@(?![0-9a-f]{40}\b)([\w.-]+)")
-    hits = []
-    for wf in sorted((root / ".github/workflows").glob("*.y*ml")):
-        for n, line in enumerate(wf.read_text(errors="ignore").splitlines(), 1):
-            m = pattern.search(line)
-            if m:
-                hits.append(f"{wf.relative_to(root)}:{n}  {m.group(1)}@{m.group(2)}")
-    return hits
 
 
 # ── workflow ─────────────────────────────────────────────────────────────────
@@ -317,9 +286,49 @@ def cmd_doctor(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_scan(args) -> int:
+    from auditgate.scan import ALL_CHECKS, EXIT_ERROR, ScanError, exit_code, render_text, run_scan
+
+    checks = tuple(c.strip() for c in args.checks.split(",")) if args.checks else ALL_CHECKS
+    unknown = set(checks) - set(ALL_CHECKS)
+    if unknown:
+        print(f"✖ checks desconocidos: {', '.join(sorted(unknown))}. Opciones: {', '.join(ALL_CHECKS)}",
+              file=sys.stderr)
+        return EXIT_ERROR
+    try:
+        report = run_scan(
+            Path.cwd(), base=args.base, checks=checks,
+            requirements=args.requirements.split() if args.requirements is not None else None,
+            use_registry=not args.no_registry, enforce_pins=not args.no_enforce_pins, strict=args.strict,
+        )
+    except ScanError as exc:
+        if args.json:
+            print(json.dumps({"gate": "error", "error": str(exc)}))
+        else:
+            print(f"✖ {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else render_text(report))
+    return exit_code(report)
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="auditgate", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser(
+        "scan",
+        help="corre el gate en tu máquina sobre los commits nuevos (el mismo del PR)",
+        description="Evalúa los commits entre el merge-base con --base y HEAD, en un worktree "
+                    "temporal (no toca tus archivos). Exit: 0 pasa · 1 bloqueado · 2 error.",
+    )
+    p.add_argument("--base", help="rama o SHA base (default: rama por defecto del remoto)")
+    p.add_argument("--json", action="store_true", help="salida JSON (para agentes y scripts)")
+    p.add_argument("--checks", help="subconjunto, p. ej. sast,deps (default: secrets,sast,deps,actions)")
+    p.add_argument("--requirements", help="requirements a auditar, separados por espacio (default: autodetecta)")
+    p.add_argument("--no-registry", action="store_true", help="sin reglas del registro de Semgrep (offline)")
+    p.add_argument("--no-enforce-pins", action="store_true", help="actions sin SHA solo se reportan")
+    p.add_argument("--strict", action="store_true", help="herramienta faltante = error (exit 2)")
+    p.set_defaults(func=cmd_scan)
 
     p = sub.add_parser("init", help="instala Auditgate en el repo actual")
     p.add_argument("--repo", help="owner/nombre (por defecto, el repo actual)")

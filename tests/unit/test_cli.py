@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from auditgate_cli import main as cli
+from auditgate import cli
 
 SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
 

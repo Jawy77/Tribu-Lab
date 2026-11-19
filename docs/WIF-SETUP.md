@@ -80,7 +80,7 @@ Si la regla cubre más de un workspace, se pasa también `anthropic-workspace-id
 - **No dejes `ANTHROPIC_API_KEY` en el entorno, ni siquiera vacía.** Tiene prioridad
   sobre la federación, y un string vacío igual ocupa su lugar en la cadena de credenciales.
   Por eso los workflows solo exportan las variables WIF opcionales cuando tienen valor.
-- **`jti` de un solo uso.** Un JWT de GitHub se canjea una vez. `scripts/gha_oidc.py`
+- **`jti` de un solo uso.** Un JWT de GitHub se canjea una vez. `src/auditgate/gha_oidc.py`
   pide un JWT nuevo antes de cada llamada (y antes de cada tarea del taskflow), porque
   el SDK relee `ANTHROPIC_IDENTITY_TOKEN_FILE` en cada intercambio.
 - **`id-token: write`** solo en los jobs que lo necesitan (triage y audit). En el caller

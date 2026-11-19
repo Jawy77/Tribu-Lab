@@ -6,7 +6,7 @@ convierte en una regla con tests**, y esa regla protege a todos los que usan la 
 ## La contribución más valiosa: una regla nueva
 
 1. **Abre un issue con la plantilla "Nueva regla"**: el patrón, un ejemplo vulnerable y uno seguro.
-2. **Escribe la regla** en `rules/<lenguaje>/auditgate-<tema>.yml`:
+2. **Escribe la regla** en `src/auditgate/rules/<lenguaje>/auditgate-<tema>.yml`:
    - `id: auditgate.<lenguaje>.<nombre>`
    - `severity: ERROR` solo si debe **bloquear** un PR; `WARNING` si solo reporta.
    - `metadata` con `cwe`, `owasp` y `origin` (de dónde salió el patrón).
@@ -15,10 +15,11 @@ convierte en una regla con tests**, y esa regla protege a todos los que usan la 
    - `# ok: <id>` en la línea anterior a cada caso que **no** debe disparar (incluye el fix).
 4. **Prueba en local**:
    ```bash
-   semgrep --test --metrics=off rules/
-   semgrep scan --metrics=off --config rules/ vulnerable_app/   # no debe romper app_secure.py
+   semgrep --test --metrics=off src/auditgate/rules/
+   semgrep scan --metrics=off --config src/auditgate/rules/ vulnerable_app/   # no debe romper app_secure.py
+   auditgate scan --base main          # el mismo gate que corre en el PR
    ```
-5. Abre el PR. El gate exige que `semgrep --test rules/` pase.
+5. Abre el PR. El gate exige que los tests de las reglas pasen.
 
 Una regla ERROR que genera ruido hace más daño que no tenerla: el gate pierde credibilidad.
 Si dudas, empieza en `WARNING`.
@@ -28,7 +29,7 @@ Si dudas, empieza en `WARNING`.
 - **Workflows** (`.github/workflows/`): toda action se fija por **SHA de 40 caracteres** con
   el tag en un comentario (`uses: owner/action@<sha> # vX.Y.Z`). El pipeline se audita a sí
   mismo y rechaza actions sin fijar. Pide solo los `permissions` que el job necesita.
-- **Agentes** (`scripts/`, `agents/taskflows/`): un agente **nunca** bloquea ni decide un merge.
+- **Agentes** (`src/auditgate/`, `agents/taskflows/`): un agente **nunca** bloquea ni decide un merge.
   El contenido del repo es dato no confiable (prompt injection) y la salida es estructurada.
 - **Docs**: español e inglés son bienvenidos.
 

@@ -8,7 +8,7 @@ Gate de dependencias diff-aware (determinista).
 - En push: solo reporta.
 
 Uso:
-    python scripts/dep_gate.py --base <sha|""> req1.txt [req2.txt ...]
+    python -m auditgate.depgate --base <sha|""> req1.txt [req2.txt ...]
 Salida: resumen markdown en $GITHUB_STEP_SUMMARY (si existe) y exit code.
 """
 from __future__ import annotations
@@ -50,9 +50,26 @@ def audit(req_text: str) -> set[tuple[str, str, str]]:
     return found
 
 
-def git_show(base: str, path: str) -> str:
-    proc = subprocess.run(["git", "show", f"{base}:{path}"], capture_output=True, text=True)
+def git_show(base: str, path: str, cwd: str | Path = ".") -> str:
+    proc = subprocess.run(["git", "show", f"{base}:{path}"], capture_output=True, text=True, cwd=cwd)
     return proc.stdout if proc.returncode == 0 else ""  # archivo nuevo en el PR
+
+
+def evaluate(base: str, files: list[str], cwd: str | Path = ".") -> list[dict]:
+    """Por archivo: vulns en HEAD y cuales son NUEVAS respecto a `base` (vacio = modo reporte).
+
+    Lo usan el gate de CI (main) y `auditgate scan`: una sola implementacion.
+    """
+    out = []
+    for f in files:
+        path = Path(cwd) / f
+        if not path.exists():
+            continue
+        head = audit(path.read_text())
+        base_ids = {vid for _, _, vid in audit(git_show(base, f, cwd))} if base else set()
+        new = {x for x in head if x[2] not in base_ids} if base else set()
+        out.append({"file": f, "head": sorted(head), "new": sorted(new)})
+    return out
 
 
 def main() -> int:
@@ -63,13 +80,8 @@ def main() -> int:
 
     lines = ["## 📦 Dependency gate (pip-audit, diff-aware)", ""]
     new_total: list[tuple[str, str, str, str]] = []
-    for f in args.files:
-        if not Path(f).exists():
-            continue
-        head = audit(Path(f).read_text())
-        base = audit(git_show(args.base, f)) if args.base else set()
-        base_ids = {vid for _, _, vid in base}
-        new = {x for x in head if x[2] not in base_ids} if args.base else set()
+    for res in evaluate(args.base, args.files):
+        f, head, new = res["file"], res["head"], set(res["new"])
         new_total += [(f, *x) for x in sorted(new)]
         lines.append(f"**`{f}`** — vulnerabilidades en HEAD: {len(head)} · nuevas en este PR: {len(new)}")
         for name, ver, vid in sorted(head):

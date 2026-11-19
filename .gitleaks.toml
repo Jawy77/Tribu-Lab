@@ -5,4 +5,4 @@ useDefault = true
 
 [[allowlists]]
 description = "Fixtures de pruebas de reglas Semgrep: secretos FAKE a proposito"
-paths = ['''^rules/.*''']
+paths = ['''^src/auditgate/rules/.*''', '''^rules/.*''']
