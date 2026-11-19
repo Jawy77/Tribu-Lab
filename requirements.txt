@@ -9,7 +9,7 @@ semgrep>=1.50.0
 safety>=3.0.0
 
 # Testing
-pytest>=8.0.0
+pytest>=9.2.0
 
 # Linting
 ruff>=0.4.0
