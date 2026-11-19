@@ -8,4 +8,6 @@ checkov==3.4.5
 pytest==9.2.0
 pip-licenses==5.5.5
 anthropic==2.9.0
+openai==3.54.0
+jsonschema==4.26.0
 pyyaml==6.0.3

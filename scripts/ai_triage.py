@@ -15,8 +15,9 @@ Guardrails:
     va delimitado y el system prompt le prohibe obedecer instrucciones que encuentre.
   - Sin tools, sin acceso a red ni a secretos: una sola llamada con salida estructurada.
   - Token de GitHub de solo `pull-requests: write` (solo comenta) en el workflow.
-  - Auth con Workload Identity Federation: sin API key de larga duracion; el JWT
-    OIDC de GitHub se cambia por un token efimero de una service account.
+  - Proveedor intercambiable (Claude, Grok, OpenAI o API compatible): ver llm.py.
+    La llave vive en el Environment `auditgate` de GitHub y nunca se imprime.
+    Con Claude puede no haber llave: Workload Identity Federation (OIDC).
 
 Uso:
     python scripts/ai_triage.py --sarif-dir sarif/ --base <sha> --out triage.md
@@ -30,9 +31,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from gha_oidc import has_anthropic_credentials, refresh_identity_token
-
-MODEL = "claude-opus-5-5"
+from llm import LLMConfigError, complete_json, has_credentials, load_config
 MAX_FINDINGS = 40
 CONTEXT_LINES = 12
 
@@ -157,32 +156,12 @@ def build_prompt(findings: list[dict]) -> str:
     return "\n".join(parts)
 
 
-def call_claude(prompt: str) -> dict:
-    import anthropic  # import tardio: el script degrada sin SDK/API key
-
-    client = anthropic.Anthropic()
-    response = client.beta.messages.create(
-        model=MODEL,
-        max_tokens=16000,
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",  # si el modelo declina, el API reintenta en un modelo de respaldo
-        system=SYSTEM_PROMPT,
-        output_config={
-            "effort": "high",
-            "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
-        },
-        messages=[{"role": "user", "content": prompt}],
-    )
-    if response.stop_reason == "refusal":
-        raise RuntimeError("El modelo declino el triage (stop_reason=refusal).")
-    text = next(b.text for b in response.content if b.type == "text")
-    return json.loads(text)
 
 
 ICON = {"true_positive": "🔴 TP", "false_positive": "⚪ FP", "needs_human": "🟡 Revisar"}
 
 
-def render(findings: list[dict], result: dict) -> str:
+def render(findings: list[dict], result: dict, model_label: str = "") -> str:
     by_id = {r["id"]: r for r in result.get("findings", [])}
     out = [
         "<!-- auditgate-ai-triage -->",
@@ -214,8 +193,8 @@ def render(findings: list[dict], result: dict) -> str:
             out.append(f"**🧬 Candidato a regla (Extract → Codify):** {r.get('codify_note', '')}\n")
         out.append("</details>\n")
     out.append(
-        "_Generado por un agente LLM sobre los SARIF del gate determinista. "
-        "No aprueba ni bloquea: el merge lo decide el gate + un humano._"
+        f"_Generado por un agente LLM ({model_label or 'modelo configurado'}) sobre los SARIF del gate "
+        "determinista. No aprueba ni bloquea: el merge lo decide el gate + un humano._"
     )
     return "\n".join(out)
 
@@ -233,16 +212,28 @@ def main() -> int:
             "<!-- auditgate-ai-triage -->\n## 🤖 AI triage\n\nSin hallazgos en los archivos de este PR. ✅\n"
         )
         return 0
-    if not has_anthropic_credentials():
-        print("Sin credenciales de Anthropic (WIF/API key): se omite el triage (no bloqueante).")
+    try:
+        cfg = load_config()
+    except LLMConfigError as exc:
+        print(f"Triage omitido (configuracion): {exc}")
+        return 0
+    if not has_credentials(cfg):
+        print(f"Sin credenciales para {cfg.provider}: se omite el triage (no bloqueante).")
         return 0
     try:
-        refresh_identity_token()  # JWT fresco: GitHub no permite reusar un jti
-        result = call_claude(build_prompt(findings))
+        result = complete_json(
+            cfg, SYSTEM_PROMPT, build_prompt(findings), OUTPUT_SCHEMA, schema_name="auditgate_triage"
+        )
     except Exception as exc:  # el triage es asesor: un fallo nunca rompe el pipeline
         print(f"Triage omitido: {type(exc).__name__}: {exc}", file=sys.stderr)
+        if type(exc).__name__ in ("AuthenticationError", "PermissionDeniedError"):
+            print(
+                f"→ El proveedor ({cfg.provider}) rechazo la llave. Revisa que sea una API key "
+                "valida de ese proveedor y rotala con: auditgate set-key",
+                file=sys.stderr,
+            )
         return 0
-    Path(args.out).write_text(render(findings, result))
+    Path(args.out).write_text(render(findings, result, cfg.label))
     print(f"Triage escrito en {args.out} ({len(findings)} hallazgos).")
     return 0
 

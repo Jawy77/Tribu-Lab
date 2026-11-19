@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from gha_oidc import refresh_identity_token
+from llm import LLMConfigError, complete_json, has_credentials, load_config
 
 SYSTEM_PROMPT = """\
 Eres un auditor de seguridad ofensiva revisando codigo e infraestructura de un \
@@ -50,7 +50,7 @@ def load_targets(paths: list[str]) -> str:
     return "\n\n".join(blocks)
 
 
-def run_task(client, flow: dict, task: dict, files_block: str, previous: dict) -> dict:
+def run_task(cfg, flow: dict, task: dict, files_block: str, previous: dict) -> dict:
     prior = "\n\n".join(
         f"### Salida de la tarea `{tid}`\n```json\n{json.dumps(out, ensure_ascii=False, indent=2)}\n```"
         for tid, out in previous.items()
@@ -60,25 +60,15 @@ def run_task(client, flow: dict, task: dict, files_block: str, previous: dict) -
         + (f"## Contexto de tareas previas\n{prior}\n\n" if prior else "")
         + f"## Tarea `{task['id']}`\n{task['prompt']}"
     )
-    with client.beta.messages.stream(
-        model=flow.get("model", "claude-opus-5-5"),
-        max_tokens=64000,
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-        system=SYSTEM_PROMPT,
-        output_config={
-            "effort": flow.get("effort", "high"),
-            "format": {"type": "json_schema", "schema": task["schema"]},
-        },
-        messages=[{"role": "user", "content": content}],
-    ) as stream:
-        response = stream.get_final_message()
-    if response.stop_reason == "refusal":
-        raise RuntimeError(f"Tarea {task['id']}: el modelo declino (refusal).")
-    if response.stop_reason == "max_tokens":
-        raise RuntimeError(f"Tarea {task['id']}: salida truncada (max_tokens).")
-    text = next(b.text for b in response.content if b.type == "text")
-    return json.loads(text)
+    return complete_json(
+        cfg,
+        SYSTEM_PROMPT,
+        content,
+        task["schema"],
+        schema_name=f"auditgate_{task['id']}",
+        effort=flow.get("effort", "high"),
+        long_running=True,
+    )
 
 
 def render(flow: dict, results: dict) -> str:
@@ -135,16 +125,21 @@ def main() -> int:
     flow = yaml.safe_load(Path(args.taskflow).read_text())
     files_block = load_targets(flow["targets"])
 
-    import anthropic
-
-    client = anthropic.Anthropic()
+    # El modelo del taskflow es solo el default para Claude; AUDITGATE_LLM_* manda.
+    try:
+        cfg = load_config(default_model=flow.get("model"))
+    except LLMConfigError as exc:
+        print(f"Auditoria omitida (configuracion): {exc}")
+        return 0
+    if not has_credentials(cfg):
+        print(f"Auditoria omitida: sin credenciales para {cfg.provider}.")
+        return 0
+    print(f"Modelo: {cfg.label}", flush=True)
     results: dict = {}
     for task in flow["tasks"]:
         print(f"→ tarea {task['id']} ...", flush=True)
-        # Cada tarea puede durar minutos y el token de Anthropic minteado via WIF
-        # vive poco: refrescamos el JWT de GitHub antes de cada una (jti nuevo).
-        refresh_identity_token()
-        results[task["id"]] = run_task(client, flow, task, files_block, results)
+        # Con WIF, el adaptador de Claude pide un JWT fresco en cada llamada.
+        results[task["id"]] = run_task(cfg, flow, task, files_block, results)
 
     Path(args.json_out).write_text(json.dumps(results, ensure_ascii=False, indent=2))
     Path(args.out).write_text(render(flow, results))

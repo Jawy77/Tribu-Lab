@@ -37,13 +37,29 @@ que cada repo hereda) y la metodología **Find → Extract → Codify → Scale*
 | Paved road | [`security-platform.yml`](.github/workflows/security-platform.yml) | Reusable workflow; un repo lo consume con unas 10 líneas |
 | Gate determinista | job `🚦 Security Gate` | Único check requerido. Bloquea solo lo **nuevo** (diff-aware) |
 | Reglas con tests | [`rules/`](rules/) | Python/Flask y supply chain de GitHub Actions |
-| Triage con IA | [`scripts/ai_triage.py`](scripts/ai_triage.py) | Comenta TP/FP, alcanzabilidad y fix en el PR. **Nunca bloquea** |
+| Triage con IA | [`scripts/ai_triage.py`](scripts/ai_triage.py) | Comenta TP/FP, alcanzabilidad y fix en el PR. **Nunca bloquea**. Claude, Grok, OpenAI o compatible |
+| CLI | [`cli/`](cli/auditgate_cli/main.py) | `auditgate init / set-key / doctor`: instala y guarda la llave en el vault |
 | Agente de auditoría | [`agents/taskflows/`](agents/taskflows/) | La metodología en YAML; el modelo es intercambiable |
 | Sin API keys | [`docs/WIF-SETUP.md`](docs/WIF-SETUP.md) | Los agentes se autentican con el OIDC de GitHub (Workload Identity Federation) |
 | Supply chain | [`release.yml`](.github/workflows/release.yml) | SHA pinning, mínimo privilegio, SBOM, provenance SLSA, cosign keyless |
 | Política | [`SECURITY.md`](SECURITY.md) | Reglas para reportes, incluidos los asistidos por IA |
 
 Arquitectura, política del gate y guardrails de los agentes: [`docs/PLATFORM-V2.md`](docs/PLATFORM-V2.md).
+
+## Empezar en 1 minuto
+
+```bash
+pipx install "git+https://github.com/Jawy77/auditgate"
+cd tu-repo
+auditgate init      # elige el modelo: Claude, Grok, OpenAI o uno compatible (Ollama, OpenRouter...)
+git add .github/workflows/auditgate.yml && git commit -m "ci: instala Auditgate" && git push
+```
+
+- **Tu modelo, tu llave.** La llave se pide sin mostrarla, viaja por stdin y queda cifrada en
+  el Environment `auditgate` de GitHub: solo el job del agente la recibe.
+  Detalle en [`docs/LLM-PROVIDERS.md`](docs/LLM-PROVIDERS.md).
+- **Sin modelo también funciona.** El gate determinista no depende de la IA; el agente es opcional.
+- **Con Claude puedes no tener llave:** Workload Identity Federation ([`docs/WIF-SETUP.md`](docs/WIF-SETUP.md)).
 
 ## Origen
 

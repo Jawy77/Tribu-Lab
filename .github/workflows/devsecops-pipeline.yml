@@ -38,13 +38,19 @@ jobs:
       security-events: write # subir SARIF a Code Scanning
       pull-requests: write # solo para el comentario del agente de triage
       id-token: write # OIDC → Workload Identity Federation con Anthropic (sin API key)
+    secrets: inherit # el job del agente recibe el secreto del Environment `auditgate`
     with:
       python-version: "3.12"
       requirements: "vulnerable_app/requirements.txt docker/openclaw/requirements.txt requirements.txt"
       image-dockerfile: "docker/app/Dockerfile"
       image-context: "."
       iac-dir: "terraform"
+      tests-path: "tests/"
       ai-triage: true
+      # Modelo del agente (variables del repo; la llave va en el Environment `auditgate`).
+      llm-provider: ${{ vars.AUDITGATE_LLM_PROVIDER }}
+      llm-model: ${{ vars.AUDITGATE_LLM_MODEL }}
+      llm-base-url: ${{ vars.AUDITGATE_LLM_BASE_URL }}
       # IDs de WIF como *variables* del repo (no son secretos). Sin ellas, el triage se omite.
       anthropic-organization-id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
       anthropic-federation-rule-id: ${{ vars.ANTHROPIC_RULE_ID_PR_TRIAGE }}
