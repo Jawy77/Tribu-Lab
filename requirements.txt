@@ -6,7 +6,7 @@
 # Security Scanning
 bandit>=1.7.0
 semgrep>=1.50.0
-safety>=3.0.0
+safety>=3.8.1
 
 # Testing
 pytest>=8.0.0
