@@ -91,8 +91,13 @@ del registro de Semgrep de ese lenguaje, que el motor descarga para tu propio us
 lo redistribuye; `--no-registry` lo desactiva). El motor es [Opengrep](https://github.com/opengrep/opengrep)
 (LGPL, binario único); si ya tienes Semgrep instalado también sirve: mismas reglas, mismos resultados.
 
-**El gate nunca da un verde engañoso:** si encuentra código en un lenguaje sin reglas (por ejemplo
-Dart), lo avisa en el PR, en `auditgate scan` y en `auditgate doctor`; con `--strict`, es un error.
+**El gate nunca da un verde engañoso:**
+- Si encuentra código en un lenguaje sin reglas (por ejemplo Dart), lo avisa en el PR, en
+  `auditgate scan` y en `auditgate doctor`.
+- Si encuentra un manifiesto **sin lockfile** (`package.json` sin `package-lock.json`, `yarn.lock`
+  o `pnpm-lock.yaml`; `Cargo.toml`, `Gemfile`, `composer.json` sin el suyo), avisa que esas
+  dependencias **no se revisaron**: sin lockfile no se sabe qué versiones se instalan.
+- Con `--strict`, cualquiera de los dos casos es un error.
 
 **Para agentes:** agrega a tu `CLAUDE.md` (o equivalente) algo como *"antes de abrir un PR,
 corre `auditgate scan --json` y corrige todo lo que tenga `status: blocked`"*. El agente

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import glob
 import re
+import subprocess
 from pathlib import Path
 
 SKIP_DIRS = (".venv", "venv", "node_modules", ".auditgate", ".git")
@@ -37,3 +38,37 @@ def unpinned_actions(root: Path) -> list[str]:
             if m:
                 hits.append(f"{wf.relative_to(root)}:{n}  {m.group(1)}@{m.group(2)}")
     return hits
+
+
+# manifiesto → lockfiles que permiten saber que versiones se instalan de verdad
+LOCKFILES = {
+    "package.json": ("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "npm-shrinkwrap.json", "bun.lock", "bun.lockb"),
+    "Cargo.toml": ("Cargo.lock",),
+    "Gemfile": ("Gemfile.lock",),
+    "composer.json": ("composer.lock",),
+}
+
+
+def manifests_without_lockfile(root: Path) -> list[str]:
+    """Manifiestos trackeados sin lockfile (ni en su carpeta ni en una superior: workspaces).
+
+    Sin lockfile no se sabe que versiones se instalan, asi que el escaner de
+    dependencias no puede revisarlas: hay que avisarlo en vez de dar verde.
+    """
+    proc = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True)
+    if proc.returncode == 0:
+        files = [Path(line) for line in proc.stdout.splitlines() if line]
+    else:
+        files = [p.relative_to(root) for p in root.rglob("*") if p.is_file()]
+    tracked = {f.as_posix() for f in files}
+    missing = []
+    for f in files:
+        locks = LOCKFILES.get(f.name)
+        if not locks or any(part in SKIP_DIRS for part in f.parts):
+            continue
+        if "rules/" in f.as_posix():  # fixtures de reglas
+            continue
+        folders = [f.parent, *f.parent.parents]
+        if not any((folder / lock).as_posix().lstrip("./") in tracked for folder in folders for lock in locks):
+            missing.append(f.as_posix())
+    return sorted(missing)

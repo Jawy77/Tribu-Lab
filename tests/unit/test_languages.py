@@ -85,3 +85,22 @@ def test_scan_reports_coverage_and_strict_fails_on_uncovered(poly, monkeypatch):
     assert "SAST no revisó código en: dart" in scan.render_text(report)
     strict = scan.run_scan(poly, base="main", checks=("sast",), strict=True)
     assert strict["gate"] == "error" and scan.exit_code(strict) == 2
+
+
+def test_manifest_without_lockfile_is_flagged_not_silently_green(tmp_path):
+    from auditgate.project import manifests_without_lockfile
+
+    r = tmp_path / "r"
+    for path in ("app/package.json", "locked/package.json", "locked/yarn.lock",
+                 "mono/pnpm-lock.yaml", "mono/packages/a/package.json",
+                 "rs/Cargo.toml", "node_modules/x/package.json"):
+        f = r / path
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("{}\n")
+    git(r, "init", "-q", "-b", "main")
+    git(r, "config", "user.name", "t")
+    git(r, "config", "user.email", "t@t")
+    git(r, "add", "-A", "-f")
+    git(r, "commit", "-qm", "x")
+    # app/ no tiene lockfile; mono/packages/a lo hereda del workspace; rs/ no tiene Cargo.lock
+    assert manifests_without_lockfile(r) == ["app/package.json", "rs/Cargo.toml"]

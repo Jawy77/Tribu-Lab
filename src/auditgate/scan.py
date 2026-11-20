@@ -27,7 +27,7 @@ from pathlib import Path
 
 from auditgate import __version__
 from auditgate.languages import sast_plan
-from auditgate.project import unpinned_actions
+from auditgate.project import manifests_without_lockfile, unpinned_actions
 from auditgate.tools import resolve as find_tool
 
 ALL_CHECKS = ("secrets", "sast", "deps", "actions")
@@ -182,6 +182,9 @@ def check_deps(head_wt: Path, base_wt: Path | None) -> Check:
         notes.append("ecosistemas: " + ", ".join(sorted({v["ecosystem"] for v in result["head"]})))
     if debt:
         notes.append(f"{debt} previa(s): deuda, no bloquea")
+    unlocked = manifests_without_lockfile(head_wt)
+    if unlocked:
+        notes.append(f"SIN LOCKFILE (no revisado): {', '.join(unlocked)}")
     check.detail = " · ".join(notes)
     return check
 
@@ -218,6 +221,7 @@ def run_scan(repo: Path, base: str | None = None, checks: tuple[str, ...] = ALL_
         base_wt = tmp / "base"
         _git("worktree", "add", "--detach", str(base_wt), merge_base, cwd=repo)
     plan: dict = {"languages": {}, "coverage": {}, "uncovered": []}
+    unlocked: list[str] = []
     try:
         results: list[Check] = []
         for c in checks:
@@ -228,6 +232,7 @@ def run_scan(repo: Path, base: str | None = None, checks: tuple[str, ...] = ALL_
                 results.append(sast)
             elif c == "deps":
                 results.append(check_deps(wt, base_wt))
+                unlocked = manifests_without_lockfile(wt)
             elif c == "actions":
                 results.append(check_actions(wt, enforce_pins))
     finally:
@@ -243,6 +248,9 @@ def run_scan(repo: Path, base: str | None = None, checks: tuple[str, ...] = ALL_
             # En modo estricto, codigo sin reglas de SAST no puede dar verde.
             if r.id == "sast" and plan["uncovered"] and r.status == "passed":
                 r.status = "error"
+            # Ni dependencias que no se pudieron revisar por falta de lockfile.
+            if r.id == "deps" and unlocked and r.status == "passed":
+                r.status = "error"
     statuses = {r.status for r in results}
     gate = "error" if "error" in statuses else "blocked" if "blocked" in statuses else "passed"
     return {
@@ -254,6 +262,7 @@ def run_scan(repo: Path, base: str | None = None, checks: tuple[str, ...] = ALL_
         "languages": plan["languages"],
         "sast_coverage": plan["coverage"],
         "uncovered_languages": plan["uncovered"],
+        "manifests_without_lockfile": unlocked,
         "checks": [asdict(r) for r in results],
         "summary": {
             "blocking_findings": sum(len(r.findings) for r in results if r.status == "blocked"),
@@ -299,6 +308,9 @@ def render_text(report: dict) -> str:
     }[report["gate"]]
     if report["summary"]["skipped"] and report["gate"] == "passed":
         verdict += f" (omitidos: {', '.join(report['summary']['skipped'])})"
+    if report.get("manifests_without_lockfile"):
+        lines.append(f"  ⚠ Dependencias NO revisadas (falta lockfile): {', '.join(report['manifests_without_lockfile'])}. "
+                     "Genera y commitea el lockfile (p. ej. `npm install --package-lock-only`).")
     if report.get("uncovered_languages"):
         lines.append(f"  ⚠ SAST no revisó código en: {', '.join(report['uncovered_languages'])} "
                      "(no hay reglas para ese lenguaje; agrega reglas en rules/ o revísalo a mano)")
