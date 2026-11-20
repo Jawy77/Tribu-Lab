@@ -59,10 +59,10 @@ def test_worktree_is_cleaned_and_uncommitted_is_flagged(repo):
 
 
 def test_missing_tool_is_skipped_or_error_in_strict(repo, monkeypatch):
-    monkeypatch.setattr(scan.shutil, "which", lambda _: None)
+    monkeypatch.setattr(scan, "find_tool", lambda _: None)
     report = scan.run_scan(repo, base="main", checks=("secrets", "sast"))
     assert [c["status"] for c in report["checks"]] == ["skipped", "skipped"]
-    assert "pipx install semgrep" in report["checks"][1]["detail"]
+    assert "auditgate setup" in report["checks"][1]["detail"]
     assert report["gate"] == "passed"
     strict = scan.run_scan(repo, base="main", checks=("secrets",), strict=True)
     assert strict["gate"] == "error" and scan.exit_code(strict) == 2
@@ -85,14 +85,16 @@ def test_sast_normalizes_rule_ids_and_skips_actions_rules(repo, monkeypatch):
     real_run = subprocess.run
 
     def fake_run(cmd, **kw):
-        if cmd[0] == "semgrep":
+        if Path(cmd[0]).name == "opengrep":
             seen["cmd"] = cmd
             return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(fake), stderr="")
         return real_run(cmd, **kw)
 
-    monkeypatch.setattr(scan.shutil, "which", lambda t: f"/usr/bin/{t}")
+    monkeypatch.setattr(scan, "find_tool", lambda t: f"/usr/bin/{t}")
     monkeypatch.setattr(scan.subprocess, "run", fake_run)
     report = scan.run_scan(repo, base="main", checks=("sast",))
+    assert report["checks"][0]["tool"] == "opengrep"
+    assert "--metrics=off" not in seen["cmd"]  # opengrep no tiene telemetria ni esa opcion
     rules = [f["rule"] for f in report["checks"][0]["findings"]]
     assert rules == ["auditgate.flask.sqli-string-built-query",
                      "python.flask.security.injection.tainted-sql-string.tainted-sql-string"]
@@ -121,3 +123,20 @@ def test_cli_exit_codes(repo, monkeypatch, capsys):
     assert out["gate"] == "blocked"
     assert cli.main(["scan", "--base", "main", "--checks", "nope"]) == 2
     assert cli.main(["scan", "--base", "no-existe", "--checks", "actions", "--json"]) == 2
+
+
+def test_semgrep_is_used_as_fallback_engine_with_metrics_off(repo, monkeypatch):
+    git(repo, "commit", "--allow-empty", "-qm", "c")
+    seen = {}
+    real_run = subprocess.run
+
+    def fake_run(cmd, **kw):
+        if Path(cmd[0]).name == "semgrep":
+            seen["cmd"] = cmd
+            return subprocess.CompletedProcess(cmd, 0, stdout='{"results": [], "errors": []}', stderr="")
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(scan, "find_tool", lambda t: None if t == "opengrep" else f"/usr/bin/{t}")
+    monkeypatch.setattr(scan.subprocess, "run", fake_run)
+    report = scan.run_scan(repo, base="main", checks=("sast",))
+    assert report["checks"][0]["tool"] == "semgrep" and "--metrics=off" in seen["cmd"]

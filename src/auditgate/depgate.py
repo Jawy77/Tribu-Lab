@@ -31,6 +31,12 @@ from pathlib import Path
 TOOL = "osv-scanner"
 
 
+def _tool() -> str | None:
+    from auditgate.tools import resolve
+
+    return resolve(TOOL)
+
+
 def osv_scan(directory: str | Path) -> list[dict]:
     """Vulnerabilidades del directorio, una por grupo de alias (CVE = GHSA = PYSEC cuentan como una).
 
@@ -38,7 +44,7 @@ def osv_scan(directory: str | Path) -> list[dict]:
     """
     directory = Path(directory).resolve()
     proc = subprocess.run(
-        [TOOL, "scan", "source", "-r", str(directory), "--format", "json",
+        [_tool() or TOOL, "scan", "source", "-r", str(directory), "--format", "json",
          "--allow-no-lockfiles", "--no-call-analysis=all"],
         capture_output=True, text=True, check=False,
     )
@@ -89,7 +95,7 @@ def evaluate(head_dir: str | Path, base_dir: str | Path | None = None) -> dict:
     return {"head": head, "new": [v for v in head if _key(v) not in base_keys]}
 
 
-def render(result: dict, pr_mode: bool) -> str:
+def render(result: dict, pr_mode: bool, unlocked: list[str] | None = None) -> str:
     head, new = result["head"], result["new"]
     new_keys = {_key(v) for v in new}
     lines = ["## 📦 Dependency gate (osv-scanner, diff-aware)", ""]
@@ -106,6 +112,10 @@ def render(result: dict, pr_mode: bool) -> str:
                          f"{v['severity'] or '—'} | `{v['source']}` | {tag} |")
         if len(head) > 60:
             lines.append(f"| … | y {len(head) - 60} más | | | |")
+    if unlocked:
+        lines += ["", f"> ⚠️ **Dependencias NO revisadas** (manifiesto sin lockfile): "
+                      f"{', '.join(f'`{u}`' for u in unlocked)}. Sin lockfile no se sabe qué versiones se "
+                      "instalan. Genera y commitea el lockfile (p. ej. `npm install --package-lock-only`)."]
     lines.append("")
     if pr_mode and new:
         lines.append(f"> 🚫 **Bloqueado:** este PR introduce {len(new)} vulnerabilidad(es) nueva(s).")
@@ -123,8 +133,8 @@ def main() -> int:
     ap.add_argument("legacy_files", nargs="*", help=argparse.SUPPRESS)  # compat: antes recibia requirements
     args = ap.parse_args()
 
-    if not shutil.which(TOOL):
-        print(f"✖ {TOOL} no está instalado.", file=sys.stderr)
+    if not _tool():
+        print(f"✖ {TOOL} no está instalado. Corre `auditgate setup`.", file=sys.stderr)
         return 2
     root = Path(args.root).resolve()
     # HEAD y BASE se materializan en worktrees temporales: se escanea solo lo
@@ -136,14 +146,19 @@ def main() -> int:
             subprocess.run(["git", "worktree", "add", "--detach", str(tmp / name), ref],
                            cwd=root, check=True, capture_output=True)
         result = evaluate(tmp / "head", tmp / "base" if args.base else None)
+        from auditgate.project import manifests_without_lockfile
+
+        unlocked = manifests_without_lockfile(tmp / "head")
     finally:
         for name in trees:
             subprocess.run(["git", "worktree", "remove", "--force", str(tmp / name)],
                            cwd=root, capture_output=True)
         shutil.rmtree(tmp, ignore_errors=True)
 
-    out = render(result, pr_mode=bool(args.base))
+    out = render(result, pr_mode=bool(args.base), unlocked=unlocked)
     print(out)
+    if unlocked and os.environ.get("GITHUB_ACTIONS"):
+        print(f"::warning title=Auditgate: dependencias sin revisar::Manifiestos sin lockfile: {', '.join(unlocked)}")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a") as fh:

@@ -38,7 +38,8 @@ que cada repo hereda) y la metodología **Find → Extract → Codify → Scale*
 | Gate determinista | job `🚦 Security Gate` | Único check requerido. Bloquea solo lo **nuevo** (diff-aware) |
 | Reglas con tests | [`src/auditgate/rules/`](src/auditgate/rules/) | Python/Flask y supply chain de GitHub Actions |
 | Triage con IA | [`src/auditgate/triage.py`](src/auditgate/triage.py) | Comenta TP/FP, alcanzabilidad y fix en el PR. **Nunca bloquea**. Claude, Grok, OpenAI o compatible |
-| CLI | [`src/auditgate/cli.py`](src/auditgate/cli.py) | `auditgate scan` (el gate en tu máquina) · `init / set-key / doctor` |
+| CLI | [`src/auditgate/cli.py`](src/auditgate/cli.py) | `auditgate setup` · `scan` (el gate en tu máquina) · `init / set-key / doctor` |
+| Motores fijados | [`src/auditgate/tools.json`](src/auditgate/tools.json) | Versión y SHA-256 de cada motor; lo usan `setup` y CI |
 | Agente de auditoría | [`agents/taskflows/`](agents/taskflows/) | La metodología en YAML; el modelo es intercambiable |
 | Sin API keys | [`docs/WIF-SETUP.md`](docs/WIF-SETUP.md) | Los agentes se autentican con el OIDC de GitHub (Workload Identity Federation) |
 | Supply chain | [`release.yml`](.github/workflows/release.yml) | SHA pinning, mínimo privilegio, SBOM, provenance SLSA, cosign keyless |
@@ -63,9 +64,19 @@ auditgate scan --checks sast   # solo un control: secrets, sast, deps, actions
 ```
 
 `scan` corre en un worktree temporal de tu último commit, así que evalúa lo que llegará al PR
-y nunca toca tus archivos. Usa las mismas herramientas que CI, instaladas aparte:
-`brew install gitleaks osv-scanner` y `pipx install semgrep`. Si falta una, ese
-control se omite y lo avisa; con `--strict`, falta = error.
+y nunca toca tus archivos.
+
+Los motores se instalan con **un comando**, sin sudo, Docker ni Python extra:
+
+```bash
+auditgate setup          # opengrep (SAST), gitleaks (secretos), osv-scanner (dependencias)
+auditgate setup --check  # qué está instalado
+```
+
+Cada binario se descarga de su release oficial y **solo se instala si su SHA-256 coincide con el
+fijado** en [`tools.json`](src/auditgate/tools.json). GitHub Actions usa ese mismo instalador y
+ese mismo manifiesto, así que tu máquina y CI corren exactamente las mismas versiones. Si falta
+un motor, ese control se omite y lo avisa; con `--strict`, falta = error.
 
 ### Lenguajes
 
@@ -73,14 +84,20 @@ control se omite y lo avisa; con `--strict`, falta = error.
 |---|---|
 | Secretos, workflows de GitHub Actions, contenedor | Cualquier lenguaje |
 | **Dependencias** (osv-scanner) | npm, PyPI, Go, Maven/Gradle, crates.io, RubyGems, Packagist, NuGet… con transitivas |
-| **SAST** (Semgrep) | Un set de reglas por cada lenguaje detectado: Python, JavaScript, TypeScript, Go, Java, Kotlin, Ruby, PHP, C#, Rust, C/C++, Scala, Swift |
+| **SAST** (Opengrep) | Un set de reglas por cada lenguaje detectado: Python, JavaScript, TypeScript, Go, Java, Kotlin, Ruby, PHP, C#, Rust, C/C++, Scala, Swift |
 
 Reglas propias de Auditgate (MIT, con tests): Python/Flask y Node.js. Para el resto se usa el set
-del registro de Semgrep de ese lenguaje, que tu Semgrep descarga para tu propio uso (Auditgate no
-lo redistribuye; `--no-registry` lo desactiva).
+del registro de Semgrep de ese lenguaje, que el motor descarga para tu propio uso (Auditgate no
+lo redistribuye; `--no-registry` lo desactiva). El motor es [Opengrep](https://github.com/opengrep/opengrep)
+(LGPL, binario único); si ya tienes Semgrep instalado también sirve: mismas reglas, mismos resultados.
 
-**El gate nunca da un verde engañoso:** si encuentra código en un lenguaje sin reglas (por ejemplo
-Dart), lo avisa en el PR, en `auditgate scan` y en `auditgate doctor`; con `--strict`, es un error.
+**El gate nunca da un verde engañoso:**
+- Si encuentra código en un lenguaje sin reglas (por ejemplo Dart), lo avisa en el PR, en
+  `auditgate scan` y en `auditgate doctor`.
+- Si encuentra un manifiesto **sin lockfile** (`package.json` sin `package-lock.json`, `yarn.lock`
+  o `pnpm-lock.yaml`; `Cargo.toml`, `Gemfile`, `composer.json` sin el suyo), avisa que esas
+  dependencias **no se revisaron**: sin lockfile no se sabe qué versiones se instalan.
+- Con `--strict`, cualquiera de los dos casos es un error.
 
 **Para agentes:** agrega a tu `CLAUDE.md` (o equivalente) algo como *"antes de abrir un PR,
 corre `auditgate scan --json` y corrige todo lo que tenga `status: blocked`"*. El agente
@@ -90,6 +107,7 @@ recibe la misma política que el gate y no puede saltársela: el merge lo sigue 
 
 ```bash
 pipx install "git+https://github.com/Jawy77/auditgate"
+auditgate setup     # una vez: instala los motores de escaneo, con hash verificado
 cd tu-repo
 auditgate init      # elige el modelo: Claude, Grok, OpenAI o uno compatible (Ollama, OpenRouter...)
 git add .github/workflows/auditgate.yml && git commit -m "ci: instala Auditgate" && git push

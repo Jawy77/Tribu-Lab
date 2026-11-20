@@ -11,8 +11,8 @@ license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Jawy Romero (Mantishield)" }]
 keywords = ["devsecops", "security", "github-actions", "semgrep", "supply-chain", "ai-agents"]
-# El CLI (init, scan, doctor) solo usa la libreria estandar. Las herramientas de
-# escaneo (semgrep, gitleaks, pip-audit) se instalan aparte y aisladas, igual que en CI.
+# El CLI solo usa la libreria estandar. Los motores de escaneo (opengrep, gitleaks,
+# osv-scanner) son binarios que `auditgate setup` descarga y verifica por hash.
 dependencies = []
 
 [project.optional-dependencies]
@@ -31,4 +31,4 @@ package-dir = { "" = "src" }
 packages = ["auditgate"]
 
 [tool.setuptools.package-data]
-auditgate = ["rules/**/*"]
+auditgate = ["rules/**/*", "tools.json"]

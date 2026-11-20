@@ -15,8 +15,9 @@ convierte en una regla con tests**, y esa regla protege a todos los que usan la 
    - `# ok: <id>` en la línea anterior a cada caso que **no** debe disparar (incluye el fix).
 4. **Prueba en local**:
    ```bash
-   semgrep --test --metrics=off src/auditgate/rules/
-   semgrep scan --metrics=off --config src/auditgate/rules/ vulnerable_app/   # no debe romper app_secure.py
+   auditgate setup                                  # una vez: instala opengrep
+   ~/.auditgate/bin/opengrep --test src/auditgate/rules/
+   ~/.auditgate/bin/opengrep scan --config src/auditgate/rules/python vulnerable_app/   # no debe romper app_secure.py
    auditgate scan --base main          # el mismo gate que corre en el PR
    ```
 5. Abre el PR. El gate exige que los tests de las reglas pasen.
@@ -35,6 +36,9 @@ Si dudas, empieza en `WARNING`.
   mismo y rechaza actions sin fijar. Pide solo los `permissions` que el job necesita.
 - **Agentes** (`src/auditgate/`, `agents/taskflows/`): un agente **nunca** bloquea ni decide un merge.
   El contenido del repo es dato no confiable (prompt injection) y la salida es estructurada.
+- **Actualizar un motor** (`src/auditgate/tools.json`): cambia la versión, las 4 URLs y los 4
+  SHA-256, tomados de los checksums oficiales del release (o, si el proyecto solo firma, tras
+  verificar la firma con `cosign verify-blob`). Nunca fijes un hash que solo calculaste tú.
 - **Docs**: español e inglés son bienvenidos.
 
 ## Excepciones (`nosemgrep`)
